@@ -1,0 +1,8 @@
+<idea-plugin>
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <fileEditorProvider implementation="cn.fj.loli.hexsupport.HexFileEditorProvider"/>
+    </extensions>
+
+</idea-plugin>
