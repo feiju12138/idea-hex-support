@@ -1,0 +1,30 @@
+# Gradle
+.gradle/
+build/
+
+# IntelliJ Platform Gradle Plugin local cache
+.intellijPlatform/
+
+# IntelliJ IDEA project files (regenerated when importing the Gradle project)
+.idea/
+*.iml
+
+# Backup archives
+*.7z
+backup.*
+
+# Gradle wrapper (not used; build with a local Gradle install)
+gradle/
+gradlew
+gradlew.bat
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Test scratch files
+test/*.jpg
+test/*.png
+test/*.bin
