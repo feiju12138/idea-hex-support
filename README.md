@@ -45,6 +45,6 @@ The plugin zip is written to `build/distributions/`.
 
 ## Compatibility
 
-- IntelliJ IDEA 2023.2+ (build 232) through 2026.x.
+- IntelliJ IDEA 2025.1+ (build 251).
 - JDK 21.
 - Verified locally on IntelliJ IDEA 2026.1 with Gradle 9.6.0 and JDK 21.0.2.
