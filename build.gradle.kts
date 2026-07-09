@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "cn.fj.loli"
-version = "v1.0.0"
+version = "1.0.0"
 
 dependencies {
     intellijPlatform {
@@ -23,7 +23,7 @@ intellijPlatform {
         """.trimIndent()
         changeNotes = """
             <ul>
-                <li>v1.0.0: Initial release.</li>
+                <li>1.0.0: Initial release.</li>
             </ul>
         """.trimIndent()
         vendor {
