@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "cn.fj.loli"
-version = "1.0.0"
+version = "v1.0.0"
 
 dependencies {
     intellijPlatform {
@@ -23,7 +23,7 @@ intellijPlatform {
         """.trimIndent()
         changeNotes = """
             <ul>
-                <li>1.0.0: Initial release.</li>
+                <li>v1.0.0: Initial release.</li>
             </ul>
         """.trimIndent()
         vendor {
@@ -31,8 +31,7 @@ intellijPlatform {
             url = "https://github.com/feiju12138/idea-hex-support"
         }
         ideaVersion {
-            sinceBuild = "232"
-            untilBuild = "269.*"
+            sinceBuild = "251"
         }
     }
 }
