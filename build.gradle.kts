@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "cn.fj.loli"
-version = "1.0.0"
+version = "1.0.1"
 
 dependencies {
     intellijPlatform {
@@ -23,6 +23,7 @@ intellijPlatform {
         """.trimIndent()
         changeNotes = """
             <ul>
+                <li>1.0.1: Fix plugin configuration defect reported by the Plugin Verifier (remove until-build; set since-build to 251).</li>
                 <li>1.0.0: Initial release.</li>
             </ul>
         """.trimIndent()
