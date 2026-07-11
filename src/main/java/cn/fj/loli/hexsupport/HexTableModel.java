@@ -1,31 +1,39 @@
 package cn.fj.loli.hexsupport;
 
 import javax.swing.table.AbstractTableModel;
-import java.nio.charset.Charset;
-import java.util.Arrays;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.Path;
+import java.util.function.Consumer;
 
 final class HexTableModel extends AbstractTableModel {
     private static final int OFFSET_COLUMN = 0;
-    private byte[] data;
+    private static final long MAX_SCROLLABLE_ROWS = 90_000_000L;
+    private static final int BYTES_PER_ROW_STEP = 4;
+
+    private final HexDocument document;
     private int bytesPerRow;
-    private Charset charset;
     private Runnable byteChangeListener = () -> {
     };
 
-    HexTableModel(byte[] data, int bytesPerRow, Charset charset) {
-        this.data = data;
-        this.bytesPerRow = bytesPerRow;
-        this.charset = charset;
+    HexTableModel(HexDocument document, int bytesPerRow) {
+        this.document = document;
+        this.bytesPerRow = Math.max(bytesPerRow, minimumSupportedBytesPerRow());
     }
 
     void setBytesPerRow(int bytesPerRow) {
-        this.bytesPerRow = bytesPerRow;
+        this.bytesPerRow = Math.max(bytesPerRow, minimumSupportedBytesPerRow());
         fireTableStructureChanged();
     }
 
-    void setCharset(Charset charset) {
-        this.charset = charset;
-        fireTableDataChanged();
+    int minimumSupportedBytesPerRow() {
+        long dataLength = getDataLength();
+        if (dataLength <= 0) {
+            return 4;
+        }
+        long minimum = (dataLength + MAX_SCROLLABLE_ROWS - 1L) / MAX_SCROLLABLE_ROWS;
+        long rounded = Math.max(4, ((minimum + BYTES_PER_ROW_STEP - 1L) / BYTES_PER_ROW_STEP) * BYTES_PER_ROW_STEP);
+        return rounded > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) rounded;
     }
 
     void setByteChangeListener(Runnable byteChangeListener) {
@@ -33,189 +41,171 @@ final class HexTableModel extends AbstractTableModel {
         } : byteChangeListener;
     }
 
-    byte[] copyData() {
-        return Arrays.copyOf(data, data.length);
+    HexDocument.State snapshot() {
+        return document.snapshot();
+    }
+
+    long revision() {
+        return document.revision();
+    }
+
+    boolean isLargeMode() {
+        return document.isLargeMode();
+    }
+
+    void restore(HexDocument.State state) {
+        document.restore(state);
+        fireTableDataChanged();
+    }
+
+    void dataChanged() {
+        fireTableDataChanged();
     }
 
     int getBytesPerRow() {
         return bytesPerRow;
     }
 
-    void replaceData(byte[] data) {
-        this.data = data;
+    void reload() {
+        document.reload();
         fireTableDataChanged();
     }
 
-    void setByteAt(int index, int value) {
-        ensureLength(index + 1);
-        data[index] = (byte) value;
+    void saveTo(Path target, HexDocument.ProgressReporter progressReporter) throws IOException {
+        document.saveTo(target, progressReporter);
+    }
+
+    void close() throws IOException {
+        document.close();
+    }
+
+    byte[] read(long startIndex, int length) {
+        return document.read(startIndex, length);
+    }
+
+    void writeRangeTo(long startIndex, long length, OutputStream output, HexDocument.ProgressReporter progressReporter) throws IOException {
+        document.writeRangeTo(startIndex, length, output, progressReporter);
+    }
+
+    void setByteAt(long index, int value) {
+        document.overwrite(index, new byte[]{(byte) value});
         byteChangeListener.run();
-        fireTableDataChanged();
+        fireTableRowsUpdated(rowForOffset(index), rowForOffset(index));
     }
 
-    void setBytesAt(int startIndex, byte[] values, boolean overwriteSelectionLength, int selectionLength) {
+    void setBytesAt(long startIndex, byte[] values, boolean overwriteSelectionLength, long selectionLength) {
         if (values.length == 0 || startIndex < 0) {
             return;
         }
-        int length = overwriteSelectionLength ? Math.min(values.length, selectionLength) : values.length;
-        ensureLength(startIndex + length);
-        System.arraycopy(values, 0, data, startIndex, length);
+        int length = overwriteSelectionLength ? (int) Math.min(values.length, selectionLength) : values.length;
+        if (length <= 0) {
+            return;
+        }
+        byte[] actual = values.length == length ? values : java.util.Arrays.copyOf(values, length);
+        document.overwrite(startIndex, actual);
         byteChangeListener.run();
         fireTableDataChanged();
     }
 
-    void fillRange(int startIndex, int length, int value) {
+    void fillRange(long startIndex, long length, int value) {
         if (startIndex < 0 || length <= 0) {
             return;
         }
-        ensureLength(startIndex + length);
-        Arrays.fill(data, startIndex, startIndex + length, (byte) value);
+        document.fill(startIndex, length, value);
         byteChangeListener.run();
         fireTableDataChanged();
     }
 
-    void deleteRangeOrZero(int startIndex, int length) {
-        if (startIndex < 0 || length <= 0 || data.length == 0) {
+    void deleteRange(long startIndex, long length) {
+        if (startIndex < 0 || length <= 0 || startIndex >= getDataLength()) {
             return;
         }
-        int endExclusive = Math.min(data.length, startIndex + length);
-        if (endExclusive >= data.length) {
-            data = Arrays.copyOf(data, startIndex);
-        } else {
-            Arrays.fill(data, startIndex, endExclusive, (byte) 0);
-        }
+        document.delete(startIndex, length);
         byteChangeListener.run();
         fireTableDataChanged();
     }
 
-    void deleteRange(int startIndex, int length) {
-        if (startIndex < 0 || length <= 0 || startIndex >= data.length) {
-            return;
-        }
-        int endExclusive = Math.min(data.length, startIndex + length);
-        byte[] updated = new byte[data.length - (endExclusive - startIndex)];
-        System.arraycopy(data, 0, updated, 0, startIndex);
-        System.arraycopy(data, endExclusive, updated, startIndex, data.length - endExclusive);
-        data = updated;
-        byteChangeListener.run();
-        fireTableDataChanged();
-    }
-
-    void insertZeros(int index, int count) {
+    void insertZeros(long index, long count) {
         if (count <= 0) {
             return;
         }
-        int insertion = Math.max(0, Math.min(index, data.length));
-        byte[] updated = new byte[data.length + count];
-        System.arraycopy(data, 0, updated, 0, insertion);
-        System.arraycopy(data, insertion, updated, insertion + count, data.length - insertion);
-        data = updated;
+        document.insertFill(index, count, 0);
         byteChangeListener.run();
         fireTableDataChanged();
     }
 
-    void insertBytes(int index, byte[] values) {
+    void insertBytes(long index, byte[] values) {
         if (values.length == 0) {
             return;
         }
-        int insertion = Math.max(0, Math.min(index, data.length));
-        byte[] updated = new byte[data.length + values.length];
-        System.arraycopy(data, 0, updated, 0, insertion);
-        System.arraycopy(values, 0, updated, insertion, values.length);
-        System.arraycopy(data, insertion, updated, insertion + values.length, data.length - insertion);
-        data = updated;
+        document.insert(index, values);
         byteChangeListener.run();
         fireTableDataChanged();
     }
 
-    void ensureLength(int length) {
-        if (length > data.length) {
-            data = Arrays.copyOf(data, length);
-        }
+    void insertFile(long index, Path path, HexDocument.ProgressReporter progressReporter) {
+        document.insertFile(index, path, progressReporter);
     }
 
-    int getDataLength() {
-        return data.length;
+    long getDataLength() {
+        return document.length();
     }
 
-    int unsignedAt(int index) {
-        if (index < 0 || index >= data.length) {
-            return 0;
-        }
-        return data[index] & 0xFF;
+    int unsignedAt(long index) {
+        return document.unsignedAt(index);
     }
 
-    int byteIndexAt(int row, int column) {
-        if (column <= OFFSET_COLUMN || column > bytesPerRow) {
-            return -1;
-        }
-        int index = row * bytesPerRow + (column - 1);
-        return index < data.length ? index : -1;
-    }
-
-    int prospectiveByteIndexAt(int row, int column) {
+    long byteIndexAt(int row, int column) {
         if (column <= OFFSET_COLUMN || column > bytesPerRow || row < 0) {
             return -1;
         }
-        return row * bytesPerRow + (column - 1);
+        long index = (long) row * bytesPerRow + (column - 1L);
+        return index < getDataLength() ? index : -1;
     }
 
-    int rowForOffset(int offset) {
-        return offset / bytesPerRow;
+    int rowForOffset(long offset) {
+        long row = offset / bytesPerRow;
+        return row > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) row;
     }
 
-    int columnForOffset(int offset) {
-        return offset % bytesPerRow + 1;
+    int columnForOffset(long offset) {
+        return (int) (offset % bytesPerRow) + 1;
     }
 
-    int find(byte[] pattern, int fromOffset) {
-        if (pattern.length == 0 || pattern.length > data.length) {
-            return -1;
+    HexDocument.FindResult findAll(byte[] pattern, long fromOffset, int limit, java.util.function.BooleanSupplier shouldContinue,
+                                   HexDocument.ProgressReporter progressReporter) {
+        return document.findAll(pattern, fromOffset, limit, shouldContinue, progressReporter);
+    }
+
+    java.util.List<HexDocument.OperationRecord> operationRecords() {
+        return document.operationRecords();
+    }
+
+    void applyHistoryRecords(java.util.List<HexDocument.OperationRecord> records) {
+        applyHistoryRecords(records, null);
+    }
+
+    void applyHistoryRecords(java.util.List<HexDocument.OperationRecord> records, Consumer<HexDocument.State> beforeRecordApplied) {
+        if (records.isEmpty()) {
+            return;
         }
-        int start = Math.max(0, fromOffset);
-        for (int i = start; i <= data.length - pattern.length; i++) {
-            boolean matched = true;
-            for (int j = 0; j < pattern.length; j++) {
-                if (data[i + j] != pattern[j]) {
-                    matched = false;
-                    break;
-                }
+        for (HexDocument.OperationRecord record : records) {
+            if (beforeRecordApplied != null) {
+                beforeRecordApplied.accept(document.snapshot());
             }
-            if (matched) {
-                return i;
-            }
+            document.applyHistoryRecord(record);
         }
-        return -1;
-    }
-
-    NumberInfo numberInfoAt(int offset) {
-        if (offset < 0 || offset >= data.length) {
-            return NumberInfo.empty();
-        }
-        int b0 = unsigned(offset);
-        Integer u16le = has(offset, 2) ? b0 | (unsigned(offset + 1) << 8) : null;
-        Integer u16be = has(offset, 2) ? (b0 << 8) | unsigned(offset + 1) : null;
-        Long u32le = has(offset, 4) ? ((long) b0) | ((long) unsigned(offset + 1) << 8) | ((long) unsigned(offset + 2) << 16) | ((long) unsigned(offset + 3) << 24) : null;
-        Long u32be = has(offset, 4) ? ((long) b0 << 24) | ((long) unsigned(offset + 1) << 16) | ((long) unsigned(offset + 2) << 8) | (long) unsigned(offset + 3) : null;
-        Float f32le = has(offset, 4) ? Float.intBitsToFloat(u32le.intValue()) : null;
-        Float f32be = has(offset, 4) ? Float.intBitsToFloat(u32be.intValue()) : null;
-        return new NumberInfo(offset, b0, (byte) b0, u16le, u16be, u32le, u32be, f32le, f32be);
-    }
-
-    private boolean has(int offset, int byteCount) {
-        return offset >= 0 && offset + byteCount <= data.length;
-    }
-
-    private int unsigned(int offset) {
-        return data[offset] & 0xFF;
+        fireTableDataChanged();
     }
 
     @Override
     public int getRowCount() {
-        if (data.length == 0) {
+        long dataLength = getDataLength();
+        if (dataLength == 0) {
             return 1;
         }
-        return (data.length + bytesPerRow - 1) / bytesPerRow;
+        long rows = (dataLength + bytesPerRow - 1L) / bytesPerRow;
+        return rows > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) rows;
     }
 
     @Override
@@ -242,18 +232,18 @@ final class HexTableModel extends AbstractTableModel {
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
         if (columnIndex == OFFSET_COLUMN) {
-            return String.format("%08X", rowIndex * bytesPerRow);
+            return String.format("%016X", (long) rowIndex * bytesPerRow);
         }
         if (columnIndex == bytesPerRow + 1) {
             return rawText(rowIndex);
         }
-        int index = byteIndexAt(rowIndex, columnIndex);
-        return index >= 0 ? String.format("%02X", data[index] & 0xFF) : "";
+        long index = byteIndexAt(rowIndex, columnIndex);
+        return index >= 0 ? String.format("%02X", unsignedAt(index)) : "";
     }
 
     @Override
     public void setValueAt(Object value, int rowIndex, int columnIndex) {
-        int index = byteIndexAt(rowIndex, columnIndex);
+        long index = byteIndexAt(rowIndex, columnIndex);
         if (index < 0 || value == null) {
             return;
         }
@@ -267,9 +257,7 @@ final class HexTableModel extends AbstractTableModel {
         } catch (NumberFormatException ignored) {
             return;
         }
-        data[index] = (byte) parsed;
-        byteChangeListener.run();
-        fireTableRowsUpdated(rowIndex, rowIndex);
+        setByteAt(index, parsed);
     }
 
     static String normalizeHexByte(String value) {
@@ -326,24 +314,17 @@ final class HexTableModel extends AbstractTableModel {
     }
 
     String rawText(int rowIndex) {
-        int start = rowIndex * bytesPerRow;
-        if (start >= data.length) {
+        long start = (long) rowIndex * bytesPerRow;
+        if (start >= getDataLength()) {
             return "";
         }
-        int length = Math.min(bytesPerRow, data.length - start);
-        StringBuilder result = new StringBuilder(length);
-        for (int i = 0; i < length; i++) {
-            int value = data[start + i] & 0xFF;
+        byte[] row = read(start, bytesPerRow);
+        StringBuilder result = new StringBuilder(row.length);
+        for (byte b : row) {
+            int value = b & 0xFF;
             char ch = (char) value;
             result.append(value < 0x20 || value > 0x7E || Character.isISOControl(ch) ? '.' : ch);
         }
         return result.toString();
-    }
-
-    record NumberInfo(int offset, int uint8, byte int8, Integer uint16Le, Integer uint16Be, Long uint32Le,
-                      Long uint32Be, Float float32Le, Float float32Be) {
-        static NumberInfo empty() {
-            return new NumberInfo(-1, 0, (byte) 0, null, null, null, null, null, null);
-        }
     }
 }

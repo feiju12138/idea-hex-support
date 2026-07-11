@@ -14,7 +14,7 @@ public class HexFileEditorProvider implements FileEditorProvider, DumbAware {
 
     @Override
     public boolean accept(@NotNull Project project, @NotNull VirtualFile file) {
-        return !file.isDirectory() && file.isValid();
+        return !file.isDirectory() && file.isValid() && file.isInLocalFileSystem();
     }
 
     @Override

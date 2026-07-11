@@ -6,7 +6,7 @@ An IntelliJ IDEA plugin that opens and edits files in a hexadecimal view.
 
 - Hex byte table with offset column, editable byte cells, and a raw (ASCII) preview column.
 - All editing actions live on the top toolbar: Save, Save As, Reload, Undo/Redo, Copy/Cut/Paste Before/Paste After, Insert 1/N Zeros Before/After, Fragment Export, and Fragment Import at File Head/Tail/After Selection.
-- Configurable bytes per row (4–32).
+- Configurable bytes per row. Very large files automatically raise the minimum bytes per row so the Swing table can scroll to the real end of the file.
 - Go To Offset (Ctrl+G) accepting hex (`0x...`) or decimal.
 - Find / Replace bar (Ctrl+F / Ctrl+R) with a paired ASCII string field that converts to hex bytes via ISO-8859-1 1:1 mapping. Replace, Replace All, Delete, Delete All, Zero, and Zero All operate on the active match or every match.
 - Multi-selection editing: Ctrl+click adds non-contiguous selections, Shift+arrows/click extends, Esc clears. Typing a hex char broadcasts to all selected cells. Ctrl+C/Ctrl+V copy and paste per same-row group. Ctrl+Shift+I inverts the selection.
