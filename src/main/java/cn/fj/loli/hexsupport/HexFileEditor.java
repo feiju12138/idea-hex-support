@@ -2407,11 +2407,11 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         updateSearchMatches(false);
     }
 
-    private static String convertStringToHex(String text) {
+    private String convertStringToHex(String text) {
         if (text.isEmpty()) {
             return "";
         }
-        byte[] bytes = text.getBytes(StandardCharsets.ISO_8859_1);
+        byte[] bytes = text.getBytes(file.getCharset());
         StringBuilder hex = new StringBuilder(bytes.length * 3);
         for (int i = 0; i < bytes.length; i++) {
             if (i > 0) {
