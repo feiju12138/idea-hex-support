@@ -8,7 +8,7 @@ import com.intellij.diff.contents.EmptyContent;
 import com.intellij.diff.contents.FileContent;
 import com.intellij.diff.requests.ContentDiffRequest;
 import com.intellij.diff.tools.util.DiffDataKeys;
-import com.intellij.diff.tools.util.PrevNextDifferenceIterable;
+import com.intellij.icons.AllIcons;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.actionSystem.AnAction;
@@ -18,7 +18,6 @@ import com.intellij.openapi.actionSystem.DataSink;
 import com.intellij.openapi.actionSystem.Presentation;
 import com.intellij.openapi.actionSystem.UiDataProvider;
 import com.intellij.openapi.actionSystem.ex.CustomComponentAction;
-import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
@@ -79,12 +78,6 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
     private final JBLabel statusLabel = new JBLabel();
     private final AtomicBoolean disposed = new AtomicBoolean();
     private final List<AnAction> toolbarActions = new ArrayList<>();
-    private final PrevNextDifferenceIterable differenceIterable = new PrevNextDifferenceIterable() {
-        @Override public boolean canGoPrev() { return canNavigate(false); }
-        @Override public boolean canGoNext() { return canNavigate(true); }
-        @Override public void goPrev() { navigate(false); }
-        @Override public void goNext() { navigate(true); }
-    };
     private Future<?> loadingTask;
     private JTable leftTable;
     private JTable rightTable;
@@ -108,6 +101,8 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
         center.add(messageLabel(HexEditorBundle.message("diff.loading")), BorderLayout.CENTER);
         component.add(center, BorderLayout.CENTER);
         statusLabel.setBorder(JBUI.Borders.empty(2, 8));
+        toolbarActions.add(new DifferenceNavigationAction(false));
+        toolbarActions.add(new DifferenceNavigationAction(true));
         toolbarActions.add(new BytesPerRowAction());
         installNavigationShortcuts();
         ApplicationManager.getApplication().getMessageBus().connect(this)
@@ -341,7 +336,6 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
     public void uiDataSnapshot(@NotNull DataSink sink) {
         Navigatable navigatable = currentNavigatable();
         if (project != null) sink.set(CommonDataKeys.PROJECT, project);
-        sink.set(DiffDataKeys.PREV_NEXT_DIFFERENCE_ITERABLE, differenceIterable);
         if (navigatable != null) {
             sink.set(DiffDataKeys.NAVIGATABLE, navigatable);
             sink.set(DiffDataKeys.NAVIGATABLE_ARRAY, new Navigatable[]{navigatable});
@@ -527,7 +521,7 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
             Charset charset = documentContent.getCharset();
             if (charset == null) charset = StandardCharsets.UTF_8;
             byte[] body = text.getBytes(charset);
-            byte[] bom = Boolean.TRUE.equals(documentContent.hasBom()) ? CharsetToolkit.getPossibleBom(charset) : null;
+            byte[] bom = Boolean.TRUE.equals(documentContent.hasBom()) ? bomFor(charset) : null;
             int length = body.length + (bom == null ? 0 : bom.length);
             if (length > MAX_CONTENT_BYTES) throw tooLargeException();
             if (bom == null || bom.length == 0) return body;
@@ -536,6 +530,20 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
             return result;
         }
         throw new IOException(HexEditorBundle.message("diff.unsupported.content"));
+    }
+
+    private static byte @Nullable [] bomFor(Charset charset) {
+        String name = charset.name();
+        if (name.equalsIgnoreCase("UTF-8")) return new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+        if (name.equalsIgnoreCase("UTF-16LE")) return new byte[]{(byte) 0xFF, (byte) 0xFE};
+        if (name.equalsIgnoreCase("UTF-16BE") || name.equalsIgnoreCase("UTF-16")) {
+            return new byte[]{(byte) 0xFE, (byte) 0xFF};
+        }
+        if (name.equalsIgnoreCase("UTF-32LE")) return new byte[]{(byte) 0xFF, (byte) 0xFE, 0, 0};
+        if (name.equalsIgnoreCase("UTF-32BE") || name.equalsIgnoreCase("UTF-32")) {
+            return new byte[]{0, 0, (byte) 0xFE, (byte) 0xFF};
+        }
+        return null;
     }
 
     private static IOException tooLargeException() {
@@ -563,6 +571,27 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
             spinner.addChangeListener(event -> setBytesPerRow((Integer) spinner.getValue()));
             panel.add(spinner);
             return panel;
+        }
+    }
+
+    private final class DifferenceNavigationAction extends AnAction {
+        private final boolean next;
+
+        private DifferenceNavigationAction(boolean next) {
+            super(HexEditorBundle.message(next ? "diff.next" : "diff.previous"),
+                    HexEditorBundle.message(next ? "diff.next" : "diff.previous"),
+                    next ? AllIcons.Actions.NextOccurence : AllIcons.Actions.PreviousOccurence);
+            this.next = next;
+        }
+
+        @Override
+        public void actionPerformed(@NotNull AnActionEvent event) {
+            navigate(next);
+        }
+
+        @Override
+        public void update(@NotNull AnActionEvent event) {
+            event.getPresentation().setEnabled(canNavigate(next));
         }
     }
 
