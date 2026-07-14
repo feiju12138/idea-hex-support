@@ -5,7 +5,7 @@ import com.intellij.diff.FrameDiffTool;
 import com.intellij.diff.contents.DiffContent;
 import com.intellij.diff.requests.ContentDiffRequest;
 import com.intellij.diff.tools.util.DiffDataKeys;
-import com.intellij.diff.tools.util.PrevNextDifferenceIterable;
+import com.intellij.icons.AllIcons;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
@@ -60,12 +60,6 @@ final class HexUnifiedDiffViewer implements FrameDiffTool.DiffViewer, UiDataProv
     private final JBLabel statusLabel = new JBLabel();
     private final List<AnAction> toolbarActions = new ArrayList<>();
     private final AtomicBoolean disposed = new AtomicBoolean();
-    private final PrevNextDifferenceIterable differenceIterable = new PrevNextDifferenceIterable() {
-        @Override public boolean canGoPrev() { return canNavigate(false); }
-        @Override public boolean canGoNext() { return canNavigate(true); }
-        @Override public void goPrev() { navigate(false); }
-        @Override public void goNext() { navigate(true); }
-    };
     private Future<?> loadingTask;
     private JTable table;
     private JScrollPane scrollPane;
@@ -83,6 +77,8 @@ final class HexUnifiedDiffViewer implements FrameDiffTool.DiffViewer, UiDataProv
         center.add(messageLabel(HexEditorBundle.message("diff.loading")), BorderLayout.CENTER);
         component.add(center, BorderLayout.CENTER);
         statusLabel.setBorder(JBUI.Borders.empty(2, 8));
+        toolbarActions.add(new DifferenceNavigationAction(false));
+        toolbarActions.add(new DifferenceNavigationAction(true));
         toolbarActions.add(new BytesPerRowAction());
         installNavigationShortcuts();
         ApplicationManager.getApplication().getMessageBus().connect(this)
@@ -217,7 +213,6 @@ final class HexUnifiedDiffViewer implements FrameDiffTool.DiffViewer, UiDataProv
     public void uiDataSnapshot(@NotNull DataSink sink) {
         Navigatable navigatable = currentNavigatable();
         if (project != null) sink.set(CommonDataKeys.PROJECT, project);
-        sink.set(DiffDataKeys.PREV_NEXT_DIFFERENCE_ITERABLE, differenceIterable);
         if (navigatable != null) {
             sink.set(DiffDataKeys.NAVIGATABLE, navigatable);
             sink.set(DiffDataKeys.NAVIGATABLE_ARRAY, new Navigatable[]{navigatable});
@@ -355,6 +350,27 @@ final class HexUnifiedDiffViewer implements FrameDiffTool.DiffViewer, UiDataProv
             spinner.addChangeListener(event -> setBytesPerRow((Integer) spinner.getValue()));
             panel.add(spinner);
             return panel;
+        }
+    }
+
+    private final class DifferenceNavigationAction extends AnAction {
+        private final boolean next;
+
+        private DifferenceNavigationAction(boolean next) {
+            super(HexEditorBundle.message(next ? "diff.next" : "diff.previous"),
+                    HexEditorBundle.message(next ? "diff.next" : "diff.previous"),
+                    next ? AllIcons.Actions.NextOccurence : AllIcons.Actions.PreviousOccurence);
+            this.next = next;
+        }
+
+        @Override
+        public void actionPerformed(@NotNull AnActionEvent event) {
+            navigate(next);
+        }
+
+        @Override
+        public void update(@NotNull AnActionEvent event) {
+            event.getPresentation().setEnabled(canNavigate(next));
         }
     }
 
