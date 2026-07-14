@@ -5,10 +5,12 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <fileEditorProvider implementation="cn.fj.loli.hexsupport.HexFileEditorProvider"/>
+        <diff.DiffTool implementation="cn.fj.loli.hexsupport.HexDiffTool"/>
+        <diff.DiffTool implementation="cn.fj.loli.hexsupport.HexUnifiedDiffTool"/>
         <toolWindow id="Hex History" anchor="right" factoryClass="cn.fj.loli.hexsupport.HexOperationHistoryToolWindowFactory"/>
         <applicationService serviceImplementation="cn.fj.loli.hexsupport.HexSupportSettings"/>
         <applicationConfigurable parentId="tools" instance="cn.fj.loli.hexsupport.HexSupportConfigurable"
-                                 id="cn.fj.loli.hexsupport.settings"/>
+                                 id="cn.fj.loli.hexsupport.settings" key="settings.displayName"/>
     </extensions>
 
 </idea-plugin>
