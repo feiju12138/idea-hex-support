@@ -1,150 +1,25 @@
-# Hex Support plugin - English (default) resource bundle
+package cn.fj.loli.hexsupport;
 
-# Loaded by the IntelliJ plugin descriptor according to the current IDE locale.
-plugin.cn.fj.loli.hexsupport.description=<p>Open and edit files as hexadecimal data inside IntelliJ IDEA.</p><p>Provides an editable hex byte table plus side-by-side and unified Hex viewers for the IDE Diff window, with byte alignment, insert/delete/modify highlighting, and Jump to Source support.</p>
+import com.intellij.AbstractBundle;
+import org.jetbrains.annotations.Nls;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.PropertyKey;
 
-# --- Editor ---
-editor.name=Hex
-column.offset=Offset
-column.raw=Raw
-label.bytesPerRow=Bytes/row
+/**
+ * Resource bundle for the Hex Support plugin. Delegates to IntelliJ's
+ * {@link AbstractBundle}, which reads the JVM default locale. IntelliJ sets
+ * {@code -Duser.language} at startup based on the IDE language selected in
+ * Settings, so this automatically follows the IDE language.
+ */
+public final class HexEditorBundle extends AbstractBundle {
+    public static final String BUNDLE = "cn.fj.loli.hexsupport.HexEditorBundle";
+    private static final HexEditorBundle INSTANCE = new HexEditorBundle();
 
-# --- Diff viewer ---
-diff.viewer.name=Hex-by-Hex Viewer
-diff.unified.viewer.name=Unified Hex Viewer
-diff.old.offset=Old offset
-diff.new.offset=New offset
-diff.loading=Loading hexadecimal diff…
-diff.left=Left
-diff.right=Right
-diff.previous=Previous Difference
-diff.next=Next Difference
-diff.identical=Contents are identical
-diff.differences=Difference {0} of {1}
-diff.differences.total={0} differences
-diff.coarse=Large change shown as one block
-diff.load.failed=Unable to show hexadecimal diff: {0}
-diff.file.too.large=Hex diff currently supports content up to {0} MB per side.
-diff.unsupported.content=Unsupported diff content
+    private HexEditorBundle() {
+        super(BUNDLE);
+    }
 
-# --- Toolbar actions ---
-action.save.text=Save
-action.save.description=Save (Ctrl+S)
-action.saveAs.text=Save As
-action.saveAs.description=Save As...
-action.exportHistory.text=Export History
-action.exportHistory.description=Export operation history next to the opened file
-action.reload.text=Reload
-action.reload.description=Reload from Disk
-action.undo.text=Undo
-action.undo.description=Undo (Ctrl+Z)
-action.redo.text=Redo
-action.redo.description=Redo (Ctrl+Shift+Z)
-action.bytesPerRow.text=Bytes per Row
-action.goToOffset.text=Go To Offset
-action.goToOffset.description=Go To Offset (Ctrl+G)
-action.find.text=Find Hex Pattern
-action.find.description=Find Hex Pattern (Ctrl+F)
-action.copy.text=Copy
-action.copy.description=Copy selected bytes (Ctrl+C)
-action.cut.text=Cut
-action.cut.description=Cut selected bytes (copy + delete)
-action.pasteBefore.text=Paste Before
-action.pasteBefore.description=Insert clipboard bytes before the selection
-action.pasteAfter.text=Paste After
-action.pasteAfter.description=Insert clipboard bytes after the selection
-action.insert1ZeroBefore.text=Insert 1 Zero Before
-action.insert1ZeroBefore.description=Insert 1 zero byte before the selection
-action.insert1ZeroAfter.text=Insert 1 Zero After
-action.insert1ZeroAfter.description=Insert 1 zero byte after the selection
-action.insertNZerosBefore.text=Insert N Zeros Before
-action.insertNZerosBefore.description=Insert N zero bytes before the selection...
-action.insertNZerosAfter.text=Insert N Zeros After
-action.insertNZerosAfter.description=Insert N zero bytes after the selection...
-action.fragmentExport.text=Fragment Export
-action.fragmentExport.description=Export selected bytes to file
-action.importHead.text=Import at File Head
-action.importHead.description=Insert a file's content at the beginning of the file
-action.importTail.text=Import at File Tail
-action.importTail.description=Append a file's content to the end of the file
-action.importAfterSelection.text=Import After Selection
-action.importAfterSelection.description=Insert a file's content after the selection
-action.previousOccurrence.text=Previous Occurrence
-action.nextOccurrence.text=Next Occurrence
-action.close.text=Close
-action.matches.text=Matches
-
-# --- Find / Replace bar ---
-button.toggleReplace.show.tooltip=Show Replace (Ctrl+R)
-button.toggleReplace.hide.tooltip=Hide Replace
-button.replace.text=Replace
-button.replace.tooltip=Replace active match (Enter)
-button.replaceAll.text=Replace All
-button.replaceAll.tooltip=Replace all matches
-button.delete.text=Delete
-button.delete.tooltip=Delete active selection/match
-button.deleteAll.text=Delete All
-button.deleteAll.tooltip=Delete all selections/matches
-button.zero.text=Zero
-button.zero.tooltip=Zero active selection/match
-button.zeroAll.text=Zero All
-button.zeroAll.tooltip=Zero all selections/matches
-
-# --- Status ---
-status.searching=Searching...
-status.noResults=No results
-
-# --- Dialogs ---
-dialog.insertZeros.message=Number of zero bytes to insert:
-dialog.insertBefore.title=Insert Before
-dialog.insertAfter.title=Insert After
-dialog.invalidCount.message=Enter a positive integer.
-dialog.invalidCount.title=Invalid Count
-dialog.goToOffset.message=Offset in hex or decimal:
-dialog.goToOffset.title=Go To Offset
-dialog.invalidOffset.message=Offset is outside the file range.
-dialog.invalidOffset.title=Invalid Offset
-dialog.fragmentExport.noSelection=No selection to export.
-dialog.fragmentExport.title=Fragment Export
-dialog.saveAs.title=Save As
-dialog.saveAs.description=Choose destination file
-dialog.fragmentExport.description=Choose destination file
-dialog.fragmentImport.title=Fragment Import
-dialog.reload.confirm.message=The current file is unsaved. Force reload from disk?
-dialog.reload.confirm.title=Reload File
-dialog.reload.confirm.ok=Reload
-dialog.reload.confirm.cancel=Cancel
-dialog.save.failed.title=Hex Editor Save Failed
-dialog.saveAs.failed.title=Save As Failed
-dialog.fragmentExport.failed.title=Fragment Export Failed
-dialog.fragmentImport.failed.title=Fragment Import Failed
-dialog.operationHistory.title=Operation History
-dialog.operationHistory.empty=No edit operations recorded.
-dialog.operationHistory.exported=Operation history exported to:\n{0}
-dialog.operationHistory.exportFailed=Operation History Export Failed
-dialog.operationHistory.deleteFailed=Operation History Delete Failed
-toolWindow.operationHistory.noHexEditor=Open a Hex editor to view operation history.
-
-# --- Operation history ---
-operationHistory.undone=Undone
-operationHistory.undoToHere=Undo to Here
-operationHistory.redoToHere=Redo to Here
-operation.overwrite=Overwrite
-operation.fill=Fill
-operation.insert=Insert
-operation.insertFill=Insert Fill
-operation.importFile=Import File
-operation.delete=Delete
-
-# --- Settings ---
-settings.displayName=Hex Support
-settings.autoSaveHistory=Automatically export operation history files
-settings.deleteHistoryOnSave=Delete operation history file when saving the hex file
-
-# --- Progress ---
-progress.save.title=Saving Hex file
-progress.saveAs.title=Saving Hex file as
-progress.exportFragment.title=Exporting Hex fragment
-progress.importFragment.title=Importing Hex fragment
-progress.search.title=Searching Hex data
-progress.bytes={0} / {1}
+    public static @NotNull @Nls String message(@NotNull @PropertyKey(resourceBundle = BUNDLE) String key, Object @NotNull ... params) {
+        return INSTANCE.getMessage(key, params);
+    }
+}
