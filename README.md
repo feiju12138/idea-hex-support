@@ -1,49 +1,79 @@
 # Hex Support
 
-An IntelliJ IDEA plugin that opens and edits files in a hexadecimal view.
+Hex Support is an IntelliJ IDEA plugin for viewing, editing, and comparing files as hexadecimal data.
 
-## Features
+## Highlights
 
-- Hex byte table with offset column, editable byte cells, and a raw (ASCII) preview column.
-- All editing actions live on the top toolbar: Save, Save As, Reload, Undo/Redo, Copy/Cut/Paste Before/Paste After, Insert 1/N Zeros Before/After, Fragment Export, and Fragment Import at File Head/Tail/After Selection.
-- Configurable bytes per row. Very large files automatically raise the minimum bytes per row so the Swing table can scroll to the real end of the file.
-- Go To Offset (Ctrl+G) accepting hex (`0x...`) or decimal.
-- Find / Replace bar (Ctrl+F / Ctrl+R) with a paired ASCII string field that converts to hex bytes using the file's detected charset (follows the IDE File Encoding setting, so multi-byte text like CJK is supported). Replace, Replace All, Delete, Delete All, Zero, and Zero All operate on the active match or every match.
-- Multi-selection editing: Ctrl+click adds non-contiguous selections, Shift+arrows/click extends, Esc clears. Typing a hex char broadcasts to all selected cells. Ctrl+C/Ctrl+V copy and paste per same-row group. Ctrl+Shift+I inverts the selection.
-- Undo/Redo (Ctrl+Z / Ctrl+Shift+Z) with full history.
-- Save writes back to the original file via VFS; Save As writes to a chosen path; Fragment Export writes only the selected bytes; Fragment Import inserts another file's content at the head, tail, or after the current selection.
-- Native IntelliJ look: uses IDE UI colors, borders, fonts, and selection styling.
-- Localized in English and Simplified Chinese (follows the IDE language setting).
+### Hex editor
 
-## Keyboard Shortcuts
+- Displays offsets, editable hexadecimal byte cells, and a raw ASCII preview in a native IntelliJ editor-style table.
+- Supports direct byte overwrite, multi-selection, copy, cut, paste, zero-fill, insertion, deletion, and selection inversion.
+- Provides Save, Save As, Reload, fragment import, and selected-fragment export from the editor toolbar.
+- Uses a large-file editing model with 64-bit offsets, paged reads, and streaming save/import/export operations.
+- Allows the number of bytes per row to be configured. For very large files, the minimum is adjusted automatically so the table can reach the actual end of the file.
+- Follows the active IDE color scheme, editor font, font size, line spacing, selection colors, search colors, and line-number gutter style.
+
+### Search and navigation
+
+- Go to an offset in hexadecimal (`0x...`) or decimal form.
+- Find hexadecimal byte patterns and replace, delete, or zero the current match or all matches.
+- Search through the paired text field using the file charset detected from the IDE File Encoding setting, including multibyte text such as CJK characters.
+- Runs large searches in the background to keep the UI responsive.
+
+### Undo and operation history
+
+- Integrates Undo/Redo with IntelliJ's undo system.
+- Shows edit operations in the **Hex History** tool window and supports undoing or redoing directly to a selected history entry.
+- Can export operation history manually or automatically, with an option to remove the history file after saving.
+
+### Hex diff
+
+- Adds selectable side-by-side and unified Hex viewers to the IntelliJ Diff window.
+- Aligns bytes and highlights inserted, deleted, and modified data with native IDE diff colors.
+- Supports synchronized scrolling, previous/next difference navigation, configurable bytes per row, and native editor fonts and gutter styling.
+- **Jump to Source** opens the corresponding file in the editable Hex editor and restores the exact active byte. Side-by-side mode follows the focused side; unified mode follows the selected old or new row, including insert/delete gap fallback.
+
+### Localization
+
+- Includes English and Simplified Chinese interfaces and follows the IDE language setting.
+
+## Keyboard shortcuts
+
+Shortcuts use the platform menu modifier: `Ctrl` on Windows/Linux and `Command` on macOS.
 
 | Action | Shortcut |
 | --- | --- |
-| Save | Ctrl+S |
-| Undo / Redo | Ctrl+Z / Ctrl+Shift+Z |
-| Copy / Cut / Paste | Ctrl+C / Ctrl+X / Ctrl+V |
-| Select All | Ctrl+A |
-| Invert Selection | Ctrl+Shift+I |
-| Go To Offset | Ctrl+G |
-| Find / Replace | Ctrl+F / Ctrl+R |
-| Next / Previous match (in find field) | Enter / Shift+Enter |
-| Toggle Replace row | Ctrl+R (in find/replace field) |
-| Clear selection / close find bar | Esc |
-| Start editing a byte | Enter, Space, or type 0–9 / a–f |
-| Commit edit and move to next cell | Tab |
+| Save | Ctrl/Command+S |
+| Undo / Redo | Ctrl/Command+Z / Ctrl/Command+Shift+Z |
+| Copy / Cut / Paste | Ctrl/Command+C / Ctrl/Command+X / Ctrl/Command+V |
+| Select all | Ctrl/Command+A |
+| Invert selection | Ctrl/Command+Shift+I |
+| Go to offset | Ctrl/Command+G |
+| Find / Replace | Ctrl/Command+F / Ctrl/Command+R |
+| Next / previous match | Enter / Shift+Enter |
+| Clear selection or close the find bar | Esc |
+| Zero selected bytes | Backspace |
+| Delete selected bytes | Delete |
+| Start editing a byte | Enter, Space, or `0`-`9` / `A`-`F` |
+| Commit the byte and move to the next cell | Tab |
+| Next / previous difference | F7 / Shift+F7 |
+
+## Release 2.1.0
+
+Version `2.1.0` is the consolidated release of Hex Support. It includes the complete editable Hex workflow, large-file support, charset-aware text search, operation history, and both side-by-side and unified Hex Diff viewers. Hex Diff also includes byte-level alignment and navigation, synchronized scrolling, insert/delete/modify highlighting, and exact-byte **Jump to Source** behavior.
 
 ## Build
 
-Requires JDK 21 and Gradle. Run the `buildPlugin` task:
+The project requires JDK 21 and Gradle. Build the plugin distribution with:
 
-```
+```shell
 gradle buildPlugin
 ```
 
-The plugin zip is written to `build/distributions/`.
+The resulting ZIP archive is written to `build/distributions/`.
 
 ## Compatibility
 
-- IntelliJ IDEA 2025.1+ (build 251).
-- JDK 21.
-- Verified locally on IntelliJ IDEA 2026.1 with Gradle 9.6.0 and JDK 21.0.2.
+- IntelliJ IDEA 2025.1 or later (build 251+)
+- JDK 21 for building from source
+
