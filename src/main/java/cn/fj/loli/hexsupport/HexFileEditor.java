@@ -2,6 +2,7 @@ package cn.fj.loli.hexsupport;
 
 import com.intellij.codeHighlighting.BackgroundEditorHighlighter;
 import com.intellij.openapi.command.CommandProcessor;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.undo.BasicUndoableAction;
 import com.intellij.openapi.command.undo.UndoManager;
 import com.intellij.openapi.progress.ProgressIndicator;
@@ -24,6 +25,7 @@ import com.intellij.openapi.fileEditor.FileEditor;
 import com.intellij.openapi.fileEditor.FileEditorLocation;
 import com.intellij.openapi.fileEditor.FileEditorState;
 import com.intellij.openapi.fileEditor.FileEditorStateLevel;
+import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
@@ -158,6 +160,8 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
 
         component.add(createTopPanel(), BorderLayout.NORTH);
         component.add(createEditorCenter(), BorderLayout.CENTER);
+        ApplicationManager.getApplication().getMessageBus().connect(this)
+                .subscribe(EditorColorsManager.TOPIC, scheme -> refreshEditorStyle());
         updateStatus(selectedOffset());
     }
 
@@ -168,7 +172,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         table.setColumnSelectionAllowed(false);
         table.setRowSelectionAllowed(false);
         table.setFont(monospacedFont());
-        table.setRowHeight(JBUI.scale(22));
+        table.setRowHeight(editorRowHeight(table));
         table.setShowGrid(false);
         table.setIntercellSpacing(JBUI.emptySize());
         table.setFillsViewportHeight(true);
@@ -177,8 +181,8 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         table.setSelectionBackground(selectionBackground());
         table.setSelectionForeground(selectionForeground());
         table.getTableHeader().setReorderingAllowed(false);
-        table.getTableHeader().setBackground(panelBackground());
-        table.getTableHeader().setForeground(editorForeground());
+        table.getTableHeader().setBackground(editorBackground());
+        table.getTableHeader().setForeground(lineNumberForeground());
         table.getTableHeader().setBorder(JBUI.Borders.customLine(borderColor(), 0, 0, 1, 0));
         model.setByteChangeListener(() -> {
             setModified(true);
@@ -208,13 +212,6 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
     }
 
     private void installHexKeyBindings() {
-        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), "hexMoveRight");
-        table.getActionMap().put("hexMoveRight", new AbstractAction() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
-                moveSelection(1);
-            }
-        });
         table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0), "hexTabEdit");
         table.getActionMap().put("hexTabEdit", new AbstractAction() {
             @Override
@@ -222,72 +219,6 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
                 handleTabKey();
             }
         });
-        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, KeyEvent.SHIFT_DOWN_MASK), "hexExtendRight");
-        table.getActionMap().put("hexExtendRight", new AbstractAction() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
-                extendSelection(1);
-            }
-        });
-
-        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), "hexMoveLeft");
-        table.getActionMap().put("hexMoveLeft", new AbstractAction() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
-                moveSelection(-1);
-            }
-        });
-        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, KeyEvent.SHIFT_DOWN_MASK), "hexExtendLeft");
-        table.getActionMap().put("hexExtendLeft", new AbstractAction() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
-                extendSelection(-1);
-            }
-        });
-
-        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0), "hexMoveDown");
-        table.getActionMap().put("hexMoveDown", new AbstractAction() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
-                moveSelection(model.getBytesPerRow());
-            }
-        });
-        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, KeyEvent.SHIFT_DOWN_MASK), "hexExtendDown");
-        table.getActionMap().put("hexExtendDown", new AbstractAction() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
-                extendSelection(model.getBytesPerRow());
-            }
-        });
-
-        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0), "hexMoveUp");
-        table.getActionMap().put("hexMoveUp", new AbstractAction() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
-                moveSelection(-model.getBytesPerRow());
-            }
-        });
-        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, KeyEvent.SHIFT_DOWN_MASK), "hexExtendUp");
-        table.getActionMap().put("hexExtendUp", new AbstractAction() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
-                extendSelection(-model.getBytesPerRow());
-            }
-        });
-
-        // JTable's default WHEN_FOCUSED input map (Table.focusInputMap) also binds the arrow
-        // keys to its own selection actions, which take precedence over our WHEN_ANCESTOR
-        // bindings when the table itself has focus (non-edit mode). Mirror our arrow-key
-        // bindings onto WHEN_FOCUSED so they win in both edit and non-edit modes.
-        table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), "hexMoveRight");
-        table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), "hexMoveLeft");
-        table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0), "hexMoveDown");
-        table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0), "hexMoveUp");
-        table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, KeyEvent.SHIFT_DOWN_MASK), "hexExtendRight");
-        table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, KeyEvent.SHIFT_DOWN_MASK), "hexExtendLeft");
-        table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, KeyEvent.SHIFT_DOWN_MASK), "hexExtendDown");
-        table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, KeyEvent.SHIFT_DOWN_MASK), "hexExtendUp");
-
         table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "hexClearSelection");
         table.getActionMap().put("hexClearSelection", new AbstractAction() {
             @Override
@@ -962,14 +893,17 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
     private void applyColumnWidths() {
         TableColumnModel columns = table.getColumnModel();
         int offsetColumnWidth = Math.max(JBUI.scale(82), table.getFontMetrics(table.getFont()).stringWidth("0000000000000000") + JBUI.scale(18));
+        int byteColumnWidth = Math.max(JBUI.scale(28), table.getFontMetrics(table.getFont()).stringWidth("00") + JBUI.scale(16));
+        int rawColumnWidth = Math.max(JBUI.scale(80),
+                table.getFontMetrics(table.getFont()).charWidth('M') * model.getBytesPerRow() + JBUI.scale(18));
         for (int i = 0; i < columns.getColumnCount(); i++) {
             TableColumn column = columns.getColumn(i);
             if (i == 0) {
                 column.setPreferredWidth(offsetColumnWidth);
             } else if (i == columns.getColumnCount() - 1) {
-                column.setPreferredWidth(JBUI.scale(210));
+                column.setPreferredWidth(rawColumnWidth);
             } else {
-                column.setPreferredWidth(JBUI.scale(36));
+                column.setPreferredWidth(byteColumnWidth);
             }
             DefaultTableCellRenderer renderer;
             if (i == 0) {
@@ -985,6 +919,21 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
             column.setCellRenderer(renderer);
             column.setHeaderRenderer(new HexHeaderRenderer());
         }
+    }
+
+    private void refreshEditorStyle() {
+        component.setBackground(panelBackground());
+        table.setFont(monospacedFont());
+        table.setRowHeight(editorRowHeight(table));
+        table.setBackground(editorBackground());
+        table.setForeground(editorForeground());
+        table.setSelectionBackground(selectionBackground());
+        table.setSelectionForeground(selectionForeground());
+        table.getTableHeader().setBackground(editorBackground());
+        table.getTableHeader().setForeground(lineNumberForeground());
+        applyColumnWidths();
+        component.revalidate();
+        component.repaint();
     }
 
     private void moveSelection(int delta) {
@@ -1023,17 +972,6 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
             return;
         }
         setSelectionRange(target, target);
-    }
-
-    private void extendSelection(int delta) {
-        commitMultiEditIfNeeded();
-        clearSearchResults();
-        long current = selectedOffset();
-        if (current < 0 || model.getDataLength() == 0) {
-            return;
-        }
-        long target = clampOffset(current + delta);
-        extendActiveTo(target);
     }
 
     private long clampOffset(long offset) {
@@ -1546,37 +1484,6 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
             return super.editCellAt(row, column, event);
         }
 
-        @Override
-        protected boolean processKeyBinding(KeyStroke keyStroke, KeyEvent event, int condition, boolean pressed) {
-            if (!isEditing() && pressed && event.getID() == KeyEvent.KEY_PRESSED && handleNavigationKey(event)) {
-                return true;
-            }
-            return super.processKeyBinding(keyStroke, event, condition, pressed);
-        }
-
-        private boolean handleNavigationKey(KeyEvent event) {
-            int modifiers = event.getModifiersEx();
-            boolean extend = (modifiers & KeyEvent.SHIFT_DOWN_MASK) != 0;
-            if ((modifiers & ~(KeyEvent.SHIFT_DOWN_MASK)) != 0) {
-                return false;
-            }
-            int delta = switch (event.getKeyCode()) {
-                case KeyEvent.VK_RIGHT -> 1;
-                case KeyEvent.VK_LEFT -> -1;
-                case KeyEvent.VK_DOWN -> model.getBytesPerRow();
-                case KeyEvent.VK_UP -> -model.getBytesPerRow();
-                default -> 0;
-            };
-            if (delta == 0) {
-                return false;
-            }
-            if (extend) {
-                extendSelection(delta);
-            } else {
-                moveSelection(delta);
-            }
-            return true;
-        }
     }
 
     private final class HexCellEditor extends DefaultCellEditor {
@@ -1589,6 +1496,10 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
             field = (JTextField) getComponent();
             field.setHorizontalAlignment(SwingConstants.CENTER);
             field.setFont(monospacedFont());
+            field.setBackground(editorBackground());
+            field.setForeground(editorForeground());
+            field.setSelectionColor(selectionBackground());
+            field.setSelectedTextColor(selectionForeground());
             field.setBorder(BorderFactory.createEmptyBorder());
             PlainDocument document = (PlainDocument) field.getDocument();
             document.setDocumentFilter(new DocumentFilter() {
@@ -1637,6 +1548,11 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         @Override
         public java.awt.Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
             java.awt.Component component = super.getTableCellEditorComponent(table, value, isSelected, row, column);
+            field.setFont(monospacedFont());
+            field.setBackground(editorBackground());
+            field.setForeground(editorForeground());
+            field.setSelectionColor(selectionBackground());
+            field.setSelectedTextColor(selectionForeground());
             beforeEdit = model.snapshot();
             beforeRevision = model.revision();
             field.setText(String.valueOf(value));
@@ -1671,12 +1587,15 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
             long rowStart = (long) row * model.getBytesPerRow();
             long rowEnd = model.getDataLength() <= 0 ? rowStart - 1 : Math.min(rowStart + model.getBytesPerRow() - 1L, model.getDataLength() - 1);
             if (rowEnd >= rowStart && isAnyOffsetInSelection(rowStart, rowEnd)) {
-                component.setBackground(selectionBackground());
-                component.setForeground(selectionForeground());
+                component.setBackground(caretRowBackground());
+                component.setForeground(activeLineNumberForeground());
             } else {
-                component.setBackground(editorBackground());
-                component.setForeground(JBColor.GRAY);
+                component.setBackground(gutterBackground());
+                component.setForeground(lineNumberForeground());
             }
+            setHorizontalAlignment(SwingConstants.RIGHT);
+            setFont(monospacedFont());
+            setBorder(JBUI.Borders.emptyRight(8));
             return component;
         }
     }
@@ -1723,11 +1642,12 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
                 setBackground(selectionBackground());
                 setForeground(selectionForeground());
             } else {
-                setBackground(panelBackground());
-                setForeground(editorForeground());
+                setBackground(column == 0 ? gutterBackground() : editorBackground());
+                setForeground(column == 0 ? lineNumberForeground() : editorForeground());
             }
             setHorizontalAlignment(SwingConstants.CENTER);
-            setFont(monospacedFont());
+            Font uiFont = UIManager.getFont("TableHeader.font");
+            setFont(uiFont == null ? table.getTableHeader().getFont() : uiFont);
             setBorder(JBUI.Borders.customLine(borderColor(), 0, 0, 1, 0));
             return this;
         }
@@ -2710,6 +2630,12 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         setSelectionRange(offset, offset);
     }
 
+    /** Selects and reveals a byte requested by a diff viewer's Jump to Source action. */
+    void navigateToOffset(long offset) {
+        selectOffset(offset);
+        table.requestFocusInWindow();
+    }
+
     private void setSelectionRange(long start, long end) {
         if (model.getDataLength() == 0) {
             clearByteSelection();
@@ -2982,22 +2908,15 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
     }
 
     private static Font monospacedFont() {
-        Font base = UIManager.getFont("EditorPane.font");
-        if (base == null) {
-            base = UIManager.getFont("TextArea.font");
-        }
-        int size = base == null ? JBUI.scale(13) : base.getSize();
-        return new Font(Font.MONOSPACED, Font.PLAIN, size);
+        return HexEditorStyle.font();
     }
 
     private static Color editorBackground() {
-        Color color = UIManager.getColor("EditorPane.background");
-        return color == null ? JBColor.PanelBackground : color;
+        return HexEditorStyle.editorBackground();
     }
 
     private static Color editorForeground() {
-        Color color = UIManager.getColor("EditorPane.foreground");
-        return color == null ? JBColor.foreground() : color;
+        return HexEditorStyle.editorForeground();
     }
 
     private static Color panelBackground() {
@@ -3006,18 +2925,27 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
     }
 
     private static Color selectionBackground() {
-        Color color = UIManager.getColor("Table.selectionBackground");
-        return color == null ? JBColor.namedColor("Table.selectionBackground", new JBColor(0xD6E8FF, 0x2F4B67)) : color;
+        return HexEditorStyle.selectionBackground();
     }
 
     private static Color selectionForeground() {
-        Color color = UIManager.getColor("Table.selectionForeground");
-        return color == null ? JBColor.foreground() : color;
+        return HexEditorStyle.selectionForeground();
     }
 
     private static Color searchBackground() {
-        Color color = UIManager.getColor("SearchResult.selectionBackground");
-        return color == null ? JBColor.namedColor("SearchResult.selectionBackground", new JBColor(0xFFF2A8, 0x675F20)) : color;
+        return HexEditorStyle.searchBackground();
+    }
+
+    private static Color gutterBackground() { return HexEditorStyle.gutterBackground(); }
+
+    private static Color lineNumberForeground() { return HexEditorStyle.lineNumberForeground(); }
+
+    private static Color activeLineNumberForeground() { return HexEditorStyle.activeLineNumberForeground(); }
+
+    private static Color caretRowBackground() { return HexEditorStyle.caretRowBackground(); }
+
+    private static int editorRowHeight(JTable table) {
+        return Math.max(JBUI.scale(18), Math.round(table.getFontMetrics(monospacedFont()).getHeight() * HexEditorStyle.lineSpacing()));
     }
 
     private static Color borderColor() {
