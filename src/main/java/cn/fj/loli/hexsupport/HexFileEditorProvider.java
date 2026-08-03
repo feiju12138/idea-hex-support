@@ -3,6 +3,7 @@ package cn.fj.loli.hexsupport;
 import com.intellij.openapi.fileEditor.FileEditor;
 import com.intellij.openapi.fileEditor.FileEditorPolicy;
 import com.intellij.openapi.fileEditor.FileEditorProvider;
+import com.intellij.openapi.fileTypes.FileTypeRegistry;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -14,7 +15,7 @@ public class HexFileEditorProvider implements FileEditorProvider, DumbAware {
 
     @Override
     public boolean accept(@NotNull Project project, @NotNull VirtualFile file) {
-        return !file.isDirectory() && file.isValid() && file.isInLocalFileSystem();
+        return isSupportedLocalFile(file) && isHexFile(file);
     }
 
     @Override
@@ -29,6 +30,14 @@ public class HexFileEditorProvider implements FileEditorProvider, DumbAware {
 
     @Override
     public @NotNull FileEditorPolicy getPolicy() {
-        return FileEditorPolicy.PLACE_AFTER_DEFAULT_EDITOR;
+        return FileEditorPolicy.HIDE_OTHER_EDITORS;
+    }
+
+    protected static boolean isSupportedLocalFile(@NotNull VirtualFile file) {
+        return !file.isDirectory() && file.isValid() && file.isInLocalFileSystem();
+    }
+
+    protected static boolean isHexFile(@NotNull VirtualFile file) {
+        return FileTypeRegistry.getInstance().isFileOfType(file, HexFileType.INSTANCE);
     }
 }
