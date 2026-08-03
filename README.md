@@ -6,6 +6,7 @@ Hex Support is an IntelliJ IDEA plugin for viewing, editing, and comparing files
 
 ### Hex editor
 
+- Registers **Hexadecimal files** in **Settings | Editor | File Types**. Associate a pattern such as `*.exe` with it to make Hex Support the exclusive default editor for matching files.
 - Displays offsets, editable hexadecimal byte cells, and a raw ASCII preview in a native IntelliJ editor-style table.
 - Supports direct byte overwrite, multi-selection, copy, cut, paste, zero-fill, insertion, deletion, and selection inversion.
 - Provides Save, Save As, Reload, fragment import, and selected-fragment export from the editor toolbar.
@@ -58,10 +59,6 @@ Shortcuts use the platform menu modifier: `Ctrl` on Windows/Linux and `Command` 
 | Commit the byte and move to the next cell | Tab |
 | Next / previous difference | F7 / Shift+F7 |
 
-## Release 2.1.0
-
-Version `2.1.0` is the consolidated release of Hex Support. It includes the complete editable Hex workflow, large-file support, charset-aware text search, operation history, and both side-by-side and unified Hex Diff viewers. Hex Diff also includes byte-level alignment and navigation, synchronized scrolling, insert/delete/modify highlighting, and exact-byte **Jump to Source** behavior.
-
 ## Build
 
 The project requires JDK 21 and Gradle. Build the plugin distribution with:
@@ -71,6 +68,14 @@ gradle buildPlugin
 ```
 
 The resulting ZIP archive is written to `build/distributions/`.
+
+## Make Hex the default editor for a file extension
+
+1. Open **Settings | Editor | File Types**.
+2. Select **Hexadecimal files** under **Recognized File Types**.
+3. Add a filename pattern such as `*.exe` under **File Name Patterns** and apply the change.
+
+Files matching that pattern will open directly in Hex Support. Files not assigned to this file type still offer Hex as an alternate editor.
 
 ## Compatibility
 
