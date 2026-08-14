@@ -13,6 +13,7 @@ Hex Support is an IntelliJ IDEA plugin for viewing, editing, and comparing files
 - Uses a large-file editing model with 64-bit offsets, paged reads, and streaming save/import/export operations.
 - Allows the number of bytes per row to be configured. For very large files, the minimum is adjusted automatically so the table can reach the actual end of the file.
 - Follows the active IDE color scheme, editor font, font size, line spacing, selection colors, search colors, and line-number gutter style.
+- Synchronizes selections in both directions with every text editor available for the same file, including Text Editor and the source pane of Markdown Split Editor. Multiple selections/carets created with Alt+Shift are preserved, and offsets account for the file charset, BOM, and mixed CRLF/LF/CR line separators.
 
 ### Search and navigation
 
@@ -32,6 +33,7 @@ Hex Support is an IntelliJ IDEA plugin for viewing, editing, and comparing files
 - Adds selectable side-by-side and unified Hex viewers to the IntelliJ Diff window.
 - Aligns bytes and highlights inserted, deleted, and modified data with native IDE diff colors.
 - Supports synchronized scrolling, previous/next difference navigation, configurable bytes per row, and native editor fonts and gutter styling.
+- Shares multi-range selections bidirectionally across all four Diff viewers: Side-by-side, Unified Viewer, Hex-by-Hex, and Unified Hex. Switching from any viewer to any of the other three preserves every selection/caret together with the correct old/new content side and byte offsets.
 - **Jump to Source** opens the corresponding file in the editable Hex editor and restores the exact active byte. Side-by-side mode follows the focused side; unified mode follows the selected old or new row, including insert/delete gap fallback.
 
 ### Localization
@@ -81,4 +83,3 @@ Files matching that pattern will open directly in Hex Support. Files not assigne
 
 - IntelliJ IDEA 2025.1 or later (build 251+)
 - JDK 21 for building from source
-
