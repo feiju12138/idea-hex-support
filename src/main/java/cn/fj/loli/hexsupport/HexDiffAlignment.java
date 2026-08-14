@@ -139,6 +139,20 @@ final class HexDiffAlignment {
         return null;
     }
 
+    long displayOffsetForSource(boolean left, int sourceOffset) {
+        if (sourceOffset < 0) {
+            return -1;
+        }
+        for (Segment segment : segments) {
+            int sourceStart = left ? segment.leftStart() : segment.rightStart();
+            if (sourceStart < 0 || sourceOffset < sourceStart || sourceOffset >= sourceStart + segment.length()) {
+                continue;
+            }
+            return segment.displayStart() + sourceOffset - sourceStart;
+        }
+        return -1;
+    }
+
     private static final class Builder {
         private final List<Segment> segments = new ArrayList<>();
         private final List<ChangeRange> changes = new ArrayList<>();

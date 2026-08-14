@@ -60,6 +60,18 @@ final class HexDiffTableModel extends AbstractTableModel {
         return sourceOffset(displayOffset(row, column));
     }
 
+    int sourceOffsetAtRawPosition(int row, int position) {
+        if (position < 0 || position >= bytesPerRow) {
+            return -1;
+        }
+        return sourceOffset((long) row * bytesPerRow + position);
+    }
+
+    HexDiffAlignment.Kind kindAtRawPosition(int row, int position) {
+        HexDiffAlignment.Segment segment = alignment.segmentAt((long) row * bytesPerRow + position);
+        return segment == null ? HexDiffAlignment.Kind.EQUAL : segment.kind();
+    }
+
     long displayOffsetAt(int row, int column) {
         return displayOffset(row, column);
     }

@@ -6,6 +6,9 @@ import java.util.List;
 
 /** A row-oriented projection of a byte alignment for an IDEA-style unified diff. */
 final class HexUnifiedDiffTableModel extends AbstractTableModel {
+    record Cell(int row, int column) {
+    }
+
     private record Block(int firstRow, int rowCount, int leftStart, int rightStart, int length,
                          HexDiffAlignment.Kind kind, int changeIndex) {
     }
@@ -43,6 +46,8 @@ final class HexUnifiedDiffTableModel extends AbstractTableModel {
     HexDiffAlignment.Kind kindAt(int row) { return blockAt(row).kind(); }
     int changeIndexAt(int row) { return blockAt(row).changeIndex(); }
 
+    int contentIndexAt(int row) { return blockAt(row).leftStart() >= 0 ? 0 : 1; }
+
     int sourceOffsetAt(int row, int column) {
         Block block = blockAt(row);
         return sourceOffsetAt(row, column, block.leftStart() >= 0);
@@ -57,6 +62,15 @@ final class HexUnifiedDiffTableModel extends AbstractTableModel {
         return start < 0 ? -1 : start + inBlock;
     }
 
+    int sourceOffsetAtRawPosition(int row, int position, boolean left) {
+        if (position < 0 || position >= bytesPerRow) return -1;
+        Block block = blockAt(row);
+        int inBlock = (row - block.firstRow()) * bytesPerRow + position;
+        if (inBlock >= block.length()) return -1;
+        int start = left ? block.leftStart() : block.rightStart();
+        return start < 0 ? -1 : start + inBlock;
+    }
+
     int sourceOffsetForChange(int changeIndex, boolean left) {
         for (Block block : blocks) {
             if (block.changeIndex() != changeIndex) continue;
@@ -64,6 +78,19 @@ final class HexUnifiedDiffTableModel extends AbstractTableModel {
             if (start >= 0 && block.length() > 0) return start;
         }
         return -1;
+    }
+
+    Cell cellForSourceOffset(int contentIndex, int sourceOffset) {
+        boolean left = contentIndex == 0;
+        for (Block block : blocks) {
+            int start = left ? block.leftStart() : block.rightStart();
+            if (start < 0 || sourceOffset < start || sourceOffset >= start + block.length()) {
+                continue;
+            }
+            int inBlock = sourceOffset - start;
+            return new Cell(block.firstRow() + inBlock / bytesPerRow, 2 + inBlock % bytesPerRow);
+        }
+        return null;
     }
 
     private void rebuild() {

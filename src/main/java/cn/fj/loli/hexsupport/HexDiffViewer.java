@@ -43,6 +43,7 @@ import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableColumn;
@@ -78,6 +79,9 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
     private final JBLabel statusLabel = new JBLabel();
     private final AtomicBoolean disposed = new AtomicBoolean();
     private final List<AnAction> toolbarActions = new ArrayList<>();
+    private final DiffSelectionSynchronizer selectionSynchronizer;
+    private final HexDiffSelectionModel selectionModel = new HexDiffSelectionModel();
+    private final DiffSelectionSynchronizer.HexSelectionTarget selectionTarget = this::applySynchronizedSelection;
     private Future<?> loadingTask;
     private JTable leftTable;
     private JTable rightTable;
@@ -97,6 +101,8 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
     HexDiffViewer(DiffContext context, ContentDiffRequest request) {
         this.project = context.getProject();
         this.request = request;
+        this.selectionSynchronizer = DiffSelectionSynchronizer.getInstance();
+        this.selectionSynchronizer.register(context, request);
         component.setBackground(panelBackground());
         center.add(messageLabel(HexEditorBundle.message("diff.loading")), BorderLayout.CENTER);
         component.add(center, BorderLayout.CENTER);
@@ -162,6 +168,7 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
     private void installDiff(byte[] left, byte[] right, HexDiffAlignment alignment) {
         if (disposed.get()) return;
         this.alignment = alignment;
+        selectionModel.replace(selectionSynchronizer.installHexContents(request, left, right));
         leftModel = new HexDiffTableModel(left, alignment, true, bytesPerRow);
         rightModel = new HexDiffTableModel(right, alignment, false, bytesPerRow);
         leftTable = createTable(leftModel);
@@ -187,7 +194,9 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
         center.add(splitter, BorderLayout.CENTER);
         center.revalidate();
         center.repaint();
+        selectionSynchronizer.registerHexTarget(request, selectionTarget);
         updateStatus();
+        restoreSelectionView();
     }
 
     private JScrollPane createPane(JTable table) {
@@ -278,24 +287,75 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
         MouseAdapter mouseListener = new MouseAdapter() {
             @Override public void mousePressed(MouseEvent event) {
                 currentContentIndex = contentIndex;
-                if (event.getComponent() != table) return;
-                int row = table.rowAtPoint(event.getPoint());
-                int viewColumn = table.columnAtPoint(event.getPoint());
-                if (row < 0 || viewColumn < 0) return;
-                int modelColumn = table.convertColumnIndexToModel(viewColumn);
-                HexDiffTableModel model = (HexDiffTableModel) table.getModel();
-                if (!model.isByteColumn(modelColumn)) return;
-                int sourceOffset = model.sourceOffsetAt(row, modelColumn);
-                if (sourceOffset < 0) return;
-                selectedSourceOffset = sourceOffset;
-                selectedContentIndex = contentIndex;
-                selectChangeAt(model.displayOffsetAt(row, modelColumn));
+                if (event.getComponent() == table && SwingUtilities.isLeftMouseButton(event)) {
+                    updateHexSelection(table, contentIndex, event, false);
+                }
+            }
+
+            @Override public void mouseDragged(MouseEvent event) {
+                if (event.getComponent() == table && SwingUtilities.isLeftMouseButton(event)) {
+                    updateHexSelection(table, contentIndex, event, true);
+                }
             }
         };
         table.addFocusListener(focusListener);
         gutter.addFocusListener(focusListener);
         table.addMouseListener(mouseListener);
+        table.addMouseMotionListener(mouseListener);
         gutter.addMouseListener(mouseListener);
+    }
+
+    private void updateHexSelection(JTable table, int contentIndex, MouseEvent event, boolean drag) {
+        int row = table.rowAtPoint(event.getPoint());
+        int viewColumn = table.columnAtPoint(event.getPoint());
+        if (row < 0 || viewColumn < 0) return;
+        int modelColumn = table.convertColumnIndexToModel(viewColumn);
+        HexDiffTableModel model = (HexDiffTableModel) table.getModel();
+        if (!model.isByteColumn(modelColumn)) return;
+        int sourceOffset = model.sourceOffsetAt(row, modelColumn);
+        if (sourceOffset < 0) return;
+        if (drag) {
+            selectionModel.drag(contentIndex, sourceOffset);
+        } else {
+            boolean control = (event.getModifiersEx() & MouseEvent.CTRL_DOWN_MASK) != 0;
+            boolean shift = (event.getModifiersEx() & MouseEvent.SHIFT_DOWN_MASK) != 0;
+            selectionModel.press(contentIndex, sourceOffset, control, shift);
+        }
+        selectedSourceOffset = sourceOffset;
+        selectedContentIndex = contentIndex;
+        selectChangeAt(model.displayOffsetAt(row, modelColumn));
+        selectionSynchronizer.hexSelectionChanged(request, selectionModel.snapshot(), selectionTarget);
+        leftTable.repaint();
+        rightTable.repaint();
+    }
+
+    private void applySynchronizedSelection(DiffSelectionSynchronizer.Snapshot snapshot) {
+        if (disposed.get()) return;
+        selectionModel.replace(snapshot);
+        if (alignment == null) return;
+        restoreSelectionView();
+        if (leftTable != null) leftTable.repaint();
+        if (rightTable != null) rightTable.repaint();
+        if (leftGutter != null) leftGutter.repaint();
+        if (rightGutter != null) rightGutter.repaint();
+    }
+
+    private void restoreSelectionView() {
+        DiffSelectionSynchronizer.ByteSelection active = selectionModel.activeSelection();
+        if (active == null || alignment == null) {
+            return;
+        }
+        currentContentIndex = active.contentIndex();
+        selectedContentIndex = active.contentIndex();
+        selectedSourceOffset = active.start();
+        long displayOffset = alignment.displayOffsetForSource(active.contentIndex() == 0, (int) active.start());
+        if (displayOffset < 0) {
+            return;
+        }
+        selectChangeAt(displayOffset);
+        JTable activeTable = active.contentIndex() == 0 ? leftTable : rightTable;
+        int row = (int) Math.min(Integer.MAX_VALUE, displayOffset / bytesPerRow);
+        activeTable.scrollRectToVisible(activeTable.getCellRect(row, Math.min(1, activeTable.getColumnCount() - 1), true));
     }
 
     private Navigatable currentNavigatable() {
@@ -532,7 +592,7 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
         throw new IOException(HexEditorBundle.message("diff.unsupported.content"));
     }
 
-    private static byte @Nullable [] bomFor(Charset charset) {
+    static byte @Nullable [] bomFor(Charset charset) {
         String name = charset.name();
         if (name.equalsIgnoreCase("UTF-8")) return new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
         if (name.equalsIgnoreCase("UTF-16LE")) return new byte[]{(byte) 0xFF, (byte) 0xFE};
@@ -553,6 +613,7 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
     @Override
     public void dispose() {
         disposed.set(true);
+        selectionSynchronizer.unregisterHexTarget(request, selectionTarget);
         if (loadingTask != null) loadingTask.cancel(true);
     }
 
@@ -613,6 +674,10 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
                 setBackground(HexEditorStyle.gutterBackground());
                 setForeground(HexEditorStyle.lineNumberForeground());
             }
+            if (modelColumn == model.rawColumn()) {
+                setHorizontalAlignment(SwingConstants.LEFT);
+                setText(rawSelectionHtml(model, row, value == null ? "" : value.toString()));
+            }
             if (model.isByteColumn(modelColumn)) {
                 int sourceOffset = model.sourceOffsetAt(row, modelColumn);
                 if (sourceOffset >= 0) setToolTipText(String.format("0x%016X", (long) sourceOffset));
@@ -629,8 +694,34 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
                         setForeground(HexEditorStyle.selectionForeground());
                     }
                 }
+                int contentIndex = model == leftModel ? 0 : 1;
+                if (sourceOffset >= 0 && selectionModel.contains(contentIndex, sourceOffset)) {
+                    setBackground(HexEditorStyle.selectionBackground());
+                    setForeground(HexEditorStyle.selectionForeground());
+                }
             }
             return this;
+        }
+
+        private String rawSelectionHtml(HexDiffTableModel model, int row, String raw) {
+            int contentIndex = model == leftModel ? 0 : 1;
+            StringBuilder html = new StringBuilder("<html>");
+            for (int i = 0; i < raw.length(); i++) {
+                int sourceOffset = model.sourceOffsetAtRawPosition(row, i);
+                HexDiffAlignment.Kind kind = model.kindAtRawPosition(row, i);
+                Color background = kind == HexDiffAlignment.Kind.EQUAL
+                        ? editorBackground() : HexEditorStyle.diffBackground(kind);
+                Color foreground = kind == HexDiffAlignment.Kind.EQUAL
+                        ? editorForeground() : HexEditorStyle.diffForeground(kind);
+                if (sourceOffset >= 0 && selectionModel.contains(contentIndex, sourceOffset)) {
+                    background = HexEditorStyle.selectionBackground();
+                    foreground = HexEditorStyle.selectionForeground();
+                }
+                html.append("<span style=\"background-color:").append(htmlColor(background))
+                        .append(";color:").append(htmlColor(foreground)).append("\">")
+                        .append(escapeHtml(raw.substring(i, i + 1))).append("</span>");
+            }
+            return html.append("</html>").toString();
         }
     }
 
@@ -680,6 +771,14 @@ final class HexDiffViewer implements FrameDiffTool.DiffViewer, UiDataProvider {
     }
 
     private static Color borderColor() { return JBColor.border(); }
+
+    private static String escapeHtml(String value) {
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    private static String htmlColor(Color color) {
+        return String.format("#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue());
+    }
 
     private static int editorRowHeight(JTable table) {
         return Math.max(JBUI.scale(18), Math.round(table.getFontMetrics(monospacedFont()).getHeight() * HexEditorStyle.lineSpacing()));

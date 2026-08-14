@@ -20,8 +20,12 @@ public final class HexUnifiedDiffTool implements FrameDiffTool {
     public boolean canShow(@NotNull DiffContext context, @NotNull DiffRequest request) {
         if (!(request instanceof ContentDiffRequest contentRequest)) return false;
         List<DiffContent> contents = contentRequest.getContents();
-        return contents.size() == 2 && contents.stream().allMatch(content ->
+        boolean supported = contents.size() == 2 && contents.stream().allMatch(content ->
                 content instanceof FileContent || content instanceof DocumentContent || content instanceof EmptyContent);
+        if (supported) {
+            DiffSelectionSynchronizer.getInstance().register(context, contentRequest);
+        }
+        return supported;
     }
 
     @Override

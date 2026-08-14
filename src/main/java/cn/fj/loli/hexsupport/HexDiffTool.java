@@ -25,7 +25,11 @@ public final class HexDiffTool implements FrameDiffTool {
             return false;
         }
         List<DiffContent> contents = contentRequest.getContents();
-        return contents.size() == 2 && contents.stream().allMatch(HexDiffTool::isSupportedContent);
+        boolean supported = contents.size() == 2 && contents.stream().allMatch(HexDiffTool::isSupportedContent);
+        if (supported) {
+            DiffSelectionSynchronizer.getInstance().register(context, contentRequest);
+        }
+        return supported;
     }
 
     @Override

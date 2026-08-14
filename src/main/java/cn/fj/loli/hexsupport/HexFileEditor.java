@@ -115,6 +115,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
     private final JPanel component = new JPanel(new BorderLayout());
     private final HexTableModel model;
     private final JTable table;
+    private final HexSelectionSynchronizer selectionSynchronizer;
     private final Deque<HexDocument.State> undoStack = new ArrayDeque<>();
     private final Deque<HexDocument.State> redoStack = new ArrayDeque<>();
     private final List<Selection> searchMatches = new ArrayList<>();
@@ -148,6 +149,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         this.file = file;
         this.model = new HexTableModel(new HexDocument(Path.of(file.getPath())), DEFAULT_BYTES_PER_ROW);
         this.table = new HexTable(model);
+        this.selectionSynchronizer = new HexSelectionSynchronizer(project, file, this);
         this.searchDebounceTimer = new Timer(LARGE_SEARCH_DEBOUNCE_MS, event -> updateSearchMatchesNow());
         this.searchDebounceTimer.setRepeats(false);
         this.historyAutoSaveTimer = new Timer(1000, event -> autoExportOperationHistory());
@@ -1305,7 +1307,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
             scrollToOffset(caret);
         }
         updateStatus(caret);
-        table.repaint();
+        selectionChanged();
     }
 
     private HexDocument.State rememberUndo() {
@@ -1408,6 +1410,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         if (anchor >= 0 && anchor > last) {
             anchor = last;
         }
+        selectionChanged();
     }
 
     private long firstSelectedOffset() {
@@ -2357,7 +2360,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
             anchor = -1;
             caret = -1;
             matchLabel.setText("");
-            table.repaint();
+            selectionChanged();
             return;
         }
         if (model.isLargeMode() && !immediate) {
@@ -2385,7 +2388,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
             anchor = -1;
             caret = -1;
             matchLabel.setText("");
-            table.repaint();
+            selectionChanged();
             return;
         }
         searchInProgress = true;
@@ -2461,7 +2464,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
             scrollToOffset(active.start());
         }
         updateMatchLabel();
-        table.repaint();
+        selectionChanged();
     }
 
     private void activateSearchMatch(int index) {
@@ -2478,7 +2481,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         caret = match.start();
         scrollToOffset(match.start());
         updateMatchLabel();
-        table.repaint();
+        selectionChanged();
     }
 
     private void updateMatchLabel() {
@@ -2653,6 +2656,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         caret = e;
         scrollToOffset(e);
         updateStatus(e);
+        selectionChanged();
     }
 
     private void extendActiveTo(long offset) {
@@ -2682,6 +2686,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         caret = o;
         scrollToOffset(o);
         updateStatus(o);
+        selectionChanged();
     }
 
     private void addSelection(long offset) {
@@ -2700,7 +2705,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         caret = o;
         scrollToOffset(o);
         updateStatus(o);
-        table.repaint();
+        selectionChanged();
     }
 
     private void removeOffsetFromSelection(long offset) {
@@ -2740,7 +2745,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
                     anchor = offset;
                     caret = offset;
                 }
-                table.repaint();
+                selectionChanged();
                 return;
             }
         }
@@ -2758,7 +2763,57 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         anchor = -1;
         caret = -1;
         multiEditBuffer.setLength(0);
+        selectionChanged();
+    }
+
+    private void selectionChanged() {
         table.repaint();
+        List<HexSelectionSynchronizer.ByteSelection> snapshot = new ArrayList<>(selections.size());
+        for (Selection selection : selections) {
+            snapshot.add(new HexSelectionSynchronizer.ByteSelection(selection.start(), selection.length()));
+        }
+        selectionSynchronizer.hexSelectionChanged(snapshot, activeIndex);
+    }
+
+    long binaryRevision() {
+        return model.revision();
+    }
+
+    long binaryLength() {
+        return model.getDataLength();
+    }
+
+    int unsignedByteAt(long offset) {
+        return model.unsignedAt(offset);
+    }
+
+    void applySynchronizedSelections(List<HexSelectionSynchronizer.ByteSelection> ranges, int requestedActiveIndex) {
+        if (model.getDataLength() == 0 || ranges.isEmpty()) {
+            clearByteSelection();
+            return;
+        }
+        long last = model.getDataLength() - 1;
+        HexSelectionSynchronizer.ByteSelection requestedActive = requestedActiveIndex >= 0
+                && requestedActiveIndex < ranges.size() ? ranges.get(requestedActiveIndex) : ranges.get(ranges.size() - 1);
+        long requestedCaret = Math.max(0, Math.min(requestedActive.start(), last));
+        selections.clear();
+        for (HexSelectionSynchronizer.ByteSelection range : ranges) {
+            long start = Math.max(0, Math.min(range.start(), last));
+            long end = Math.max(start, Math.min(range.endExclusive() - 1, last));
+            selections.add(new Selection(start, end - start + 1));
+        }
+        normalizeSelectionsInPlace();
+        activeIndex = findSelectionContaining(requestedCaret);
+        if (activeIndex < 0) {
+            activeIndex = selections.size() - 1;
+        }
+        Selection active = activeSelection();
+        anchor = active.start();
+        caret = active.start() + active.length() - 1;
+        clearSearchResults();
+        scrollToOffset(caret);
+        updateStatus(caret);
+        selectionChanged();
     }
 
     private void normalizeSelectionsInPlace() {
