@@ -12,6 +12,7 @@
         <diff.DiffTool implementation="cn.fj.loli.hexsupport.HexUnifiedDiffTool"/>
         <toolWindow id="Hex History" anchor="right" factoryClass="cn.fj.loli.hexsupport.HexOperationHistoryToolWindowFactory"/>
         <applicationService serviceImplementation="cn.fj.loli.hexsupport.HexSupportSettings"/>
+        <applicationService serviceImplementation="cn.fj.loli.hexsupport.DiffSelectionSynchronizer"/>
         <applicationConfigurable parentId="tools" instance="cn.fj.loli.hexsupport.HexSupportConfigurable"
                                  id="cn.fj.loli.hexsupport.settings" key="settings.displayName"/>
     </extensions>
