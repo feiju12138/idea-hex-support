@@ -72,6 +72,12 @@ public final class DiffSelectionSynchronizer implements Disposable {
     private record TextSelection(int contentIndex, int start, int end, boolean caretOnly) {
     }
 
+    private record SourceLine(int contentIndex, int line) {
+    }
+
+    private record UnifiedRange(int start, int end) {
+    }
+
     private record TextSnapshot(List<TextSelection> selections, int activeIndex,
                                 List<? extends DocumentContent> contents) {
     }
@@ -369,20 +375,18 @@ public final class DiffSelectionSynchronizer implements Disposable {
                                         List<TextSelection> selections) {
         int clamped = Math.max(0, Math.min(offset, unifiedDocument.getTextLength()));
         int line = unifiedDocument.getLineNumber(clamped);
-        Pair<int[], Side> mapping = viewer.transferLineFromOnesideStrict(line);
-        if (mapping == null) {
-            mapping = viewer.transferLineFromOneside(line);
-        }
-        Side side = resolvedSide(mapping);
-        int sourceLine = side.select(mapping.first);
-        Document sourceDocument = viewer.getDocument(side);
-        if (sourceLine < 0 || sourceLine >= sourceDocument.getLineCount()) {
-            return;
-        }
         int column = clamped - unifiedDocument.getLineStartOffset(line);
-        int sourceOffset = sourceDocument.getLineStartOffset(sourceLine)
-                + Math.min(column, sourceDocument.getLineEndOffset(sourceLine) - sourceDocument.getLineStartOffset(sourceLine));
-        selections.add(new TextSelection(side.getIndex(), sourceOffset, sourceOffset, true));
+        for (SourceLine source : sourceLines(viewer, line)) {
+            Side side = Side.fromIndex(source.contentIndex());
+            Document sourceDocument = viewer.getDocument(side);
+            if (source.line() < 0 || source.line() >= sourceDocument.getLineCount()) {
+                continue;
+            }
+            int sourceOffset = sourceDocument.getLineStartOffset(source.line())
+                    + Math.min(column, sourceDocument.getLineEndOffset(source.line())
+                    - sourceDocument.getLineStartOffset(source.line()));
+            selections.add(new TextSelection(source.contentIndex(), sourceOffset, sourceOffset, true));
+        }
     }
 
     private static void addUnifiedRange(UnifiedDiffViewer viewer, Document unifiedDocument, int start, int end,
@@ -391,18 +395,8 @@ public final class DiffSelectionSynchronizer implements Disposable {
         int clampedEnd = Math.max(clampedStart, Math.min(end, unifiedDocument.getTextLength()));
         int firstLine = unifiedDocument.getLineNumber(clampedStart);
         int lastLine = unifiedDocument.getLineNumber(Math.max(clampedStart, clampedEnd - 1));
+        List<TextSelection> projected = new ArrayList<>();
         for (int line = firstLine; line <= lastLine; line++) {
-            Pair<int[], Side> mapping = viewer.transferLineFromOnesideStrict(line);
-            if (mapping == null) {
-                mapping = viewer.transferLineFromOneside(line);
-            }
-            Side side = resolvedSide(mapping);
-            int sourceLine = side.select(mapping.first);
-            Document sourceDocument = viewer.getDocument(side);
-            if (sourceLine < 0 || sourceLine >= sourceDocument.getLineCount()) {
-                continue;
-            }
-
             int unifiedLineStart = unifiedDocument.getLineStartOffset(line);
             int unifiedLineEnd = unifiedDocument.getLineEndOffset(line);
             int segmentStart = Math.max(clampedStart, unifiedLineStart);
@@ -411,16 +405,61 @@ public final class DiffSelectionSynchronizer implements Disposable {
             if (segmentEnd <= segmentStart && !includesNewline) {
                 continue;
             }
-            int sourceLineStart = sourceDocument.getLineStartOffset(sourceLine);
-            int sourceLineEnd = sourceDocument.getLineEndOffset(sourceLine);
-            int startColumn = Math.max(0, segmentStart - unifiedLineStart);
-            int endColumn = Math.max(startColumn, segmentEnd - unifiedLineStart);
-            int sourceStart = sourceLineStart + Math.min(startColumn, sourceLineEnd - sourceLineStart);
-            int sourceEnd = sourceLineStart + Math.min(endColumn, sourceLineEnd - sourceLineStart);
-            if (includesNewline && sourceLine + 1 < sourceDocument.getLineCount()) {
-                sourceEnd = sourceDocument.getLineStartOffset(sourceLine + 1);
+            for (SourceLine source : sourceLines(viewer, line)) {
+                Side side = Side.fromIndex(source.contentIndex());
+                Document sourceDocument = viewer.getDocument(side);
+                if (source.line() < 0 || source.line() >= sourceDocument.getLineCount()) {
+                    continue;
+                }
+                int sourceLineStart = sourceDocument.getLineStartOffset(source.line());
+                int sourceLineEnd = sourceDocument.getLineEndOffset(source.line());
+                int startColumn = Math.max(0, segmentStart - unifiedLineStart);
+                int endColumn = Math.max(startColumn, segmentEnd - unifiedLineStart);
+                int sourceStart = sourceLineStart + Math.min(startColumn, sourceLineEnd - sourceLineStart);
+                int sourceEnd = sourceLineStart + Math.min(endColumn, sourceLineEnd - sourceLineStart);
+                if (includesNewline && source.line() + 1 < sourceDocument.getLineCount()) {
+                    sourceEnd = sourceDocument.getLineStartOffset(source.line() + 1);
+                }
+                addProjectedSelection(projected,
+                        new TextSelection(source.contentIndex(), sourceStart, sourceEnd, false));
             }
-            selections.add(new TextSelection(side.getIndex(), sourceStart, sourceEnd, false));
+        }
+        selections.addAll(projected);
+    }
+
+    private static void addProjectedSelection(List<TextSelection> selections, TextSelection candidate) {
+        for (int i = selections.size() - 1; i >= 0; i--) {
+            TextSelection previous = selections.get(i);
+            if (previous.contentIndex() != candidate.contentIndex()) {
+                continue;
+            }
+            if (!previous.caretOnly() && !candidate.caretOnly() && previous.end() == candidate.start()) {
+                selections.set(i, new TextSelection(previous.contentIndex(), previous.start(), candidate.end(), false));
+                return;
+            }
+            break;
+        }
+        selections.add(candidate);
+    }
+
+    private static List<SourceLine> sourceLines(UnifiedDiffViewer viewer, int unifiedLine) {
+        Pair<int[], Side> approximate = viewer.transferLineFromOneside(unifiedLine);
+        Side preferred = approximate.second;
+        List<SourceLine> result = new ArrayList<>(2);
+        addExactSourceLine(viewer, unifiedLine, preferred, result);
+        addExactSourceLine(viewer, unifiedLine, preferred.other(), result);
+        if (result.isEmpty()) {
+            Side side = resolvedSide(approximate);
+            result.add(new SourceLine(side.getIndex(), side.select(approximate.first)));
+        }
+        return result;
+    }
+
+    private static void addExactSourceLine(UnifiedDiffViewer viewer, int unifiedLine, Side side,
+                                           List<SourceLine> result) {
+        int sourceLine = viewer.transferLineFromOnesideStrict(side, unifiedLine);
+        if (sourceLine >= 0) {
+            result.add(new SourceLine(side.getIndex(), sourceLine));
         }
     }
 
@@ -519,17 +558,17 @@ public final class DiffSelectionSynchronizer implements Disposable {
     private void applyTextToUnifiedViewer(UnifiedDiffViewer viewer, TextSnapshot snapshot, long generation) {
         Editor editor = viewer.getEditor();
         List<CaretState> carets = new ArrayList<>();
+        List<UnifiedRange> ranges = new ArrayList<>();
         int localActive = -1;
         for (int i = 0; i < snapshot.selections().size(); i++) {
             TextSelection selection = snapshot.selections().get(i);
             Side side = Side.fromIndex(selection.contentIndex());
             int unifiedStart = toUnifiedOffset(viewer, side, selection.start());
             int unifiedEnd = toUnifiedOffset(viewer, side, selection.end());
+            int caretIndex = addUnifiedCaretState(editor, carets, ranges, unifiedStart, unifiedEnd);
             if (i == snapshot.activeIndex()) {
-                localActive = carets.size();
+                localActive = caretIndex;
             }
-            carets.add(new CaretState(editor.offsetToLogicalPosition(unifiedEnd),
-                    editor.offsetToLogicalPosition(unifiedStart), editor.offsetToLogicalPosition(unifiedEnd)));
         }
         setCarets(editor, carets, localActive);
         appliedGenerations.put(editor, generation);
@@ -574,6 +613,7 @@ public final class DiffSelectionSynchronizer implements Disposable {
                 mapper(viewer.getContent(Side.LEFT), state.contentBytes[0]),
                 mapper(viewer.getContent(Side.RIGHT), state.contentBytes[1]));
         List<CaretState> carets = new ArrayList<>();
+        List<UnifiedRange> ranges = new ArrayList<>();
         int localActive = -1;
         for (int i = 0; i < state.byteSnapshot.selections().size(); i++) {
             ByteSelection selection = state.byteSnapshot.selections().get(i);
@@ -583,11 +623,10 @@ public final class DiffSelectionSynchronizer implements Disposable {
             int sourceEnd = mapper.byteToTextEnd(selection.endExclusive());
             int unifiedStart = toUnifiedOffset(viewer, side, sourceStart);
             int unifiedEnd = toUnifiedOffset(viewer, side, sourceEnd);
+            int caretIndex = addUnifiedCaretState(editor, carets, ranges, unifiedStart, unifiedEnd);
             if (i == state.byteSnapshot.activeIndex()) {
-                localActive = carets.size();
+                localActive = caretIndex;
             }
-            carets.add(new CaretState(editor.offsetToLogicalPosition(unifiedEnd),
-                    editor.offsetToLogicalPosition(unifiedStart), editor.offsetToLogicalPosition(unifiedEnd)));
         }
         setCarets(editor, carets, localActive);
         appliedGenerations.put(editor, state.generation);
@@ -624,6 +663,19 @@ public final class DiffSelectionSynchronizer implements Disposable {
         int end = Math.max(start, Math.min(selection.end(), editor.getDocument().getTextLength()));
         return new CaretState(editor.offsetToLogicalPosition(end),
                 editor.offsetToLogicalPosition(start), editor.offsetToLogicalPosition(end));
+    }
+
+    private static int addUnifiedCaretState(Editor editor, List<CaretState> carets, List<UnifiedRange> ranges,
+                                            int start, int end) {
+        UnifiedRange range = new UnifiedRange(start, end);
+        int existing = ranges.indexOf(range);
+        if (existing >= 0) {
+            return existing;
+        }
+        ranges.add(range);
+        carets.add(new CaretState(editor.offsetToLogicalPosition(end),
+                editor.offsetToLogicalPosition(start), editor.offsetToLogicalPosition(end)));
+        return carets.size() - 1;
     }
 
     private static void setCarets(Editor editor, List<CaretState> carets, int activeIndex) {
