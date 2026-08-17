@@ -4,12 +4,13 @@ plugins {
 }
 
 group = "cn.fj.loli"
-version = "2.3.0"
+version = "2.3.1"
 
 dependencies {
     intellijPlatform {
-        intellijIdea("2026.1")
+        intellijIdea("2025.1")
     }
+    testRuntimeOnly("junit:junit:4.13.2")
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.12.2")
 }
@@ -25,6 +26,7 @@ intellijPlatform {
         """.trimIndent()
         changeNotes = """
             <ul>
+                <li>2.3.1: Restore IntelliJ IDEA 2025.1+ compatibility with stable platform APIs, and synchronize unchanged selections from both unified viewers to both old/new sides across all four Diff modes.</li>
                 <li>2.3.0: Synchronize all selection ranges bidirectionally between Hex and text editors, including Text Editor and Markdown Split Editor multi-caret selections and mixed line separators; share one multi-range selection state across all four Diff viewers (Side-by-side, Unified Viewer, Hex-by-Hex, and Unified Hex), so switching from any viewer to any other preserves the old/new side and exact byte offsets.</li>
                 <li>2.2.0: Add an assignable Hexadecimal file type under Settings | Editor | File Types, allowing filename patterns to make Hex the exclusive default editor while keeping Hex available as an alternate editor for other supported local files.</li>
                 <li>2.1.0: Add selectable side-by-side and unified Hex Diff viewers with byte-level alignment, synchronized scrolling, difference highlighting/navigation, configurable bytes per row, native IDEA colors and fonts, and Jump to Source support that follows the exact active byte and source side, including insert/delete gap fallback and selection restoration.</li>
@@ -40,6 +42,12 @@ intellijPlatform {
         }
         ideaVersion {
             sinceBuild = "251"
+        }
+    }
+
+    pluginVerification {
+        ides {
+            current()
         }
     }
 }
