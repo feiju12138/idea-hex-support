@@ -30,7 +30,7 @@ public class HexFileEditorProvider implements FileEditorProvider, DumbAware {
 
     @Override
     public @NotNull FileEditorPolicy getPolicy() {
-        return FileEditorPolicy.HIDE_OTHER_EDITORS;
+        return FileEditorPolicy.HIDE_DEFAULT_EDITOR;
     }
 
     protected static boolean isSupportedLocalFile(@NotNull VirtualFile file) {
