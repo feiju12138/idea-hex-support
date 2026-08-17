@@ -172,14 +172,28 @@ final class HexUnifiedDiffViewer implements FrameDiffTool.DiffViewer, UiDataProv
         if (kind == HexDiffAlignment.Kind.REMOVED || column == model.oldOffsetColumn()) currentContentIndex = 0;
         else if (kind == HexDiffAlignment.Kind.ADDED || column == model.newOffsetColumn()) currentContentIndex = 1;
         if (!model.isByteColumn(column)) return;
-        int sourceOffset = model.sourceOffsetAt(row, column, currentContentIndex == 0);
+        int leftOffset = model.sourceOffsetAt(row, column, true);
+        int rightOffset = model.sourceOffsetAt(row, column, false);
+        int sourceOffset = currentContentIndex == 0 ? leftOffset : rightOffset;
         if (sourceOffset < 0) return;
+        boolean paired = leftOffset >= 0 && rightOffset >= 0;
+        int pairedContentIndex = currentContentIndex == 0 ? 1 : 0;
+        int pairedOffset = currentContentIndex == 0 ? rightOffset : leftOffset;
         if (drag) {
-            selectionModel.drag(currentContentIndex, sourceOffset);
+            if (paired) {
+                selectionModel.dragPair(currentContentIndex, sourceOffset, pairedContentIndex, pairedOffset);
+            } else {
+                selectionModel.drag(currentContentIndex, sourceOffset);
+            }
         } else {
             boolean control = (event.getModifiersEx() & MouseEvent.CTRL_DOWN_MASK) != 0;
             boolean shift = (event.getModifiersEx() & MouseEvent.SHIFT_DOWN_MASK) != 0;
-            selectionModel.press(currentContentIndex, sourceOffset, control, shift);
+            if (paired) {
+                selectionModel.pressPair(currentContentIndex, sourceOffset, pairedContentIndex, pairedOffset,
+                        control, shift);
+            } else {
+                selectionModel.press(currentContentIndex, sourceOffset, control, shift);
+            }
         }
         selectedSourceOffset = sourceOffset;
         selectedContentIndex = currentContentIndex;
