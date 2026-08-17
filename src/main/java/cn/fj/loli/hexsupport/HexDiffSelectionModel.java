@@ -10,6 +10,9 @@ final class HexDiffSelectionModel {
     private int anchorContentIndex = -1;
     private long anchor = -1;
     private long caret = -1;
+    private int pairedAnchorContentIndex = -1;
+    private long pairedAnchor = -1;
+    private long pairedCaret = -1;
 
     void replace(DiffSelectionSynchronizer.Snapshot snapshot) {
         selections.clear();
@@ -25,6 +28,7 @@ final class HexDiffSelectionModel {
             anchor = -1;
             caret = -1;
         }
+        clearPairedAnchor();
         normalize();
     }
 
@@ -32,6 +36,7 @@ final class HexDiffSelectionModel {
         if (offset < 0) {
             return;
         }
+        clearPairedAnchor();
         if (control && !shift) {
             int selected = findContaining(contentIndex, offset);
             if (selected >= 0) {
@@ -70,9 +75,56 @@ final class HexDiffSelectionModel {
         caret = offset;
     }
 
+    void pressPair(int contentIndex, long offset, int pairedContentIndex, long pairedOffset,
+                   boolean control, boolean shift) {
+        if (offset < 0 || pairedOffset < 0 || contentIndex == pairedContentIndex) {
+            press(contentIndex, offset, control, shift);
+            return;
+        }
+        if (control && !shift) {
+            toggleOffset(contentIndex, offset);
+            toggleOffset(pairedContentIndex, pairedOffset);
+            setPairAnchors(contentIndex, offset, pairedContentIndex, pairedOffset);
+            normalize();
+            activeIndex = findContaining(contentIndex, offset);
+            if (activeIndex < 0) {
+                activeIndex = findContaining(pairedContentIndex, pairedOffset);
+            }
+            return;
+        }
+        if (control) {
+            selections.add(new DiffSelectionSynchronizer.ByteSelection(contentIndex, offset, 1));
+            selections.add(new DiffSelectionSynchronizer.ByteSelection(pairedContentIndex, pairedOffset, 1));
+            setPairAnchors(contentIndex, offset, pairedContentIndex, pairedOffset);
+            normalize();
+            activeIndex = findContaining(contentIndex, offset);
+            return;
+        }
+        if (shift && anchor >= 0 && pairedAnchor >= 0
+                && anchorContentIndex == contentIndex
+                && pairedAnchorContentIndex == pairedContentIndex) {
+            extendPair(contentIndex, offset, pairedContentIndex, pairedOffset);
+            return;
+        }
+        selections.clear();
+        selections.add(new DiffSelectionSynchronizer.ByteSelection(contentIndex, offset, 1));
+        selections.add(new DiffSelectionSynchronizer.ByteSelection(pairedContentIndex, pairedOffset, 1));
+        setPairAnchors(contentIndex, offset, pairedContentIndex, pairedOffset);
+        normalize();
+        activeIndex = findContaining(contentIndex, offset);
+    }
+
     void drag(int contentIndex, long offset) {
         if (offset >= 0 && anchor >= 0 && anchorContentIndex == contentIndex) {
             extend(contentIndex, offset);
+        }
+    }
+
+    void dragPair(int contentIndex, long offset, int pairedContentIndex, long pairedOffset) {
+        if (offset >= 0 && pairedOffset >= 0 && anchor >= 0 && pairedAnchor >= 0
+                && anchorContentIndex == contentIndex
+                && pairedAnchorContentIndex == pairedContentIndex) {
+            extendPair(contentIndex, offset, pairedContentIndex, pairedOffset);
         }
     }
 
@@ -89,17 +141,56 @@ final class HexDiffSelectionModel {
     }
 
     private void extend(int contentIndex, long offset) {
-        long start = Math.min(anchor, offset);
-        long end = Math.max(anchor, offset);
-        if (activeIndex >= 0 && activeIndex < selections.size()
-                && selections.get(activeIndex).contentIndex() == contentIndex) {
-            selections.set(activeIndex, new DiffSelectionSynchronizer.ByteSelection(contentIndex, start, end - start + 1));
-        } else {
-            selections.add(new DiffSelectionSynchronizer.ByteSelection(contentIndex, start, end - start + 1));
-        }
+        replaceExtendedSelection(contentIndex, anchor, caret, offset);
         caret = offset;
         normalize();
         activeIndex = findContaining(contentIndex, offset);
+    }
+
+    private void extendPair(int contentIndex, long offset, int pairedContentIndex, long pairedOffset) {
+        replaceExtendedSelection(contentIndex, anchor, caret, offset);
+        replaceExtendedSelection(pairedContentIndex, pairedAnchor, pairedCaret, pairedOffset);
+        caret = offset;
+        pairedCaret = pairedOffset;
+        normalize();
+        activeIndex = findContaining(contentIndex, offset);
+    }
+
+    private void replaceExtendedSelection(int contentIndex, long selectionAnchor, long previousCaret, long offset) {
+        long start = Math.min(selectionAnchor, offset);
+        long end = Math.max(selectionAnchor, offset);
+        int index = findContaining(contentIndex, previousCaret);
+        DiffSelectionSynchronizer.ByteSelection replacement =
+                new DiffSelectionSynchronizer.ByteSelection(contentIndex, start, end - start + 1);
+        if (index >= 0) {
+            selections.set(index, replacement);
+        } else {
+            selections.add(replacement);
+        }
+    }
+
+    private void toggleOffset(int contentIndex, long offset) {
+        int selected = findContaining(contentIndex, offset);
+        if (selected >= 0) {
+            removeOffset(selected, offset);
+        } else {
+            selections.add(new DiffSelectionSynchronizer.ByteSelection(contentIndex, offset, 1));
+        }
+    }
+
+    private void setPairAnchors(int contentIndex, long offset, int pairedContentIndex, long pairedOffset) {
+        anchorContentIndex = contentIndex;
+        anchor = offset;
+        caret = offset;
+        pairedAnchorContentIndex = pairedContentIndex;
+        pairedAnchor = pairedOffset;
+        pairedCaret = pairedOffset;
+    }
+
+    private void clearPairedAnchor() {
+        pairedAnchorContentIndex = -1;
+        pairedAnchor = -1;
+        pairedCaret = -1;
     }
 
     private void removeOffset(int index, long offset) {
