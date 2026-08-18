@@ -93,7 +93,7 @@ final class HexDocument implements Closeable {
         operations.clear();
         operations.addAll(state.operations());
         length = state.length();
-        operationSequence = state.operationSequence();
+        operationSequence = Math.max(operationSequence, state.operationSequence());
         originalPageCache.clear();
         revision++;
     }
@@ -306,6 +306,11 @@ final class HexDocument implements Closeable {
     }
 
     synchronized void saveTo(Path target, ProgressReporter progressReporter) throws IOException {
+        saveTo(target, List.of(), progressReporter);
+    }
+
+    synchronized void saveTo(Path target, Iterable<State> statesToPreserve,
+                             ProgressReporter progressReporter) throws IOException {
         Path absoluteTarget = target.toAbsolutePath();
         Path parent = absoluteTarget.getParent();
         if (parent == null) {
@@ -314,10 +319,13 @@ final class HexDocument implements Closeable {
         Path writePath = Files.createTempFile(parent, absoluteTarget.getFileName().toString(), ".hexsave");
         boolean moved = false;
         try {
+            boolean savingSource = absoluteTarget.equals(sourcePath.toAbsolutePath());
+            if (savingSource) {
+                archiveOriginalPieces(statesToPreserve, progressReporter);
+            }
             try (OutputStream output = Files.newOutputStream(writePath, StandardOpenOption.WRITE)) {
                 writeRangeTo(0, length, output, progressReporter);
             }
-            boolean savingSource = absoluteTarget.equals(sourcePath.toAbsolutePath());
             if (savingSource) {
                 sourceChannel.close();
             }
@@ -334,8 +342,6 @@ final class HexDocument implements Closeable {
                 }
             }
             if (savingSource) {
-                operations.clear();
-                operationSequence = 0;
                 reloadFromOpenSource();
             }
         } finally {
@@ -343,6 +349,65 @@ final class HexDocument implements Closeable {
                 Files.deleteIfExists(writePath);
             }
         }
+    }
+
+    private void archiveOriginalPieces(Iterable<State> statesToPreserve,
+                                       ProgressReporter progressReporter) throws IOException {
+        boolean needsArchive = pieces.stream().anyMatch(piece -> piece.source() == Source.ORIGINAL);
+        if (!needsArchive) {
+            for (State state : statesToPreserve) {
+                if (state.pieces().stream().anyMatch(piece -> piece.source() == Source.ORIGINAL)) {
+                    needsArchive = true;
+                    break;
+                }
+            }
+        }
+        if (!needsArchive) {
+            return;
+        }
+
+        ensureTempChannel();
+        long archiveStart = tempChannel.size();
+        long sourceLength = sourceChannel.size();
+        long copied = 0;
+        ByteBuffer buffer = ByteBuffer.allocate(PAGE_SIZE);
+        reportProgress(progressReporter, 0, sourceLength);
+        while (copied < sourceLength) {
+            buffer.clear();
+            buffer.limit((int) Math.min(buffer.capacity(), sourceLength - copied));
+            int read = sourceChannel.read(buffer, copied);
+            if (read < 0) {
+                break;
+            }
+            if (read == 0) {
+                continue;
+            }
+            buffer.flip();
+            long writePosition = archiveStart + copied;
+            while (buffer.hasRemaining()) {
+                int written = tempChannel.write(buffer, writePosition);
+                if (written <= 0) {
+                    throw new IOException("Unable to preserve the original Hex source before saving.");
+                }
+                writePosition += written;
+            }
+            copied += read;
+            reportProgress(progressReporter, copied, sourceLength);
+        }
+        if (copied != sourceLength) {
+            throw new IOException("Unable to preserve the original Hex source before saving.");
+        }
+
+        rebaseOriginalPieces(pieces, archiveStart);
+        for (State state : statesToPreserve) {
+            rebaseOriginalPieces(state.pieces(), archiveStart);
+        }
+    }
+
+    private static void rebaseOriginalPieces(List<Piece> targetPieces, long archiveStart) {
+        targetPieces.replaceAll(piece -> piece.source() == Source.ORIGINAL
+                ? new Piece(Source.ADD, archiveStart + piece.start(), piece.length(), piece.fillValue())
+                : piece);
     }
 
     synchronized void reload() {

@@ -4,6 +4,7 @@ import javax.swing.table.AbstractTableModel;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.function.Consumer;
 
 final class HexTableModel extends AbstractTableModel {
@@ -73,6 +74,11 @@ final class HexTableModel extends AbstractTableModel {
 
     void saveTo(Path target, HexDocument.ProgressReporter progressReporter) throws IOException {
         document.saveTo(target, progressReporter);
+    }
+
+    void saveTo(Path target, List<HexDocument.State> statesToPreserve,
+                HexDocument.ProgressReporter progressReporter) throws IOException {
+        document.saveTo(target, statesToPreserve, progressReporter);
     }
 
     void close() throws IOException {

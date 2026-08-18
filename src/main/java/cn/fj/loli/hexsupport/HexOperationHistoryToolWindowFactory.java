@@ -1,11 +1,17 @@
 package cn.fj.loli.hexsupport;
 
 import com.intellij.openapi.Disposable;
+import com.intellij.icons.AllIcons;
+import com.intellij.openapi.actionSystem.ActionManager;
+import com.intellij.openapi.actionSystem.ActionToolbar;
+import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.fileEditor.FileEditor;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent;
 import com.intellij.openapi.fileEditor.FileEditorManagerListener;
 import com.intellij.openapi.project.DumbAware;
+import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowFactory;
@@ -59,8 +65,7 @@ public final class HexOperationHistoryToolWindowFactory implements ToolWindowFac
             this.project = project;
             setBorder(JBUI.Borders.empty(6));
 
-            fileLabel.setBorder(JBUI.Borders.empty(0, 2, 6, 2));
-            add(fileLabel, BorderLayout.NORTH);
+            add(createHeader(), BorderLayout.NORTH);
 
             historyList.setEmptyText(HexEditorBundle.message("dialog.operationHistory.empty"));
             historyList.setCellRenderer(new HistoryLineRenderer());
@@ -75,6 +80,48 @@ public final class HexOperationHistoryToolWindowFactory implements ToolWindowFac
                 }
             });
             refreshFromSelection();
+        }
+
+        private JComponent createHeader() {
+            JPanel header = new JPanel(new BorderLayout());
+            DefaultActionGroup group = new DefaultActionGroup();
+            group.add(new DumbAwareAction(HexEditorBundle.message("action.exportHistory.text"),
+                    HexEditorBundle.message("action.exportHistory.description"), AllIcons.General.Export) {
+                @Override
+                public void actionPerformed(@NotNull AnActionEvent event) {
+                    HexFileEditor editor = currentEditor;
+                    if (editor != null) {
+                        editor.exportOperationHistory();
+                    }
+                }
+
+                @Override
+                public void update(@NotNull AnActionEvent event) {
+                    event.getPresentation().setEnabled(currentEditor != null);
+                }
+            });
+            group.add(new DumbAwareAction(HexEditorBundle.message("action.importHistory.text"),
+                    HexEditorBundle.message("action.importHistory.description"), AllIcons.ToolbarDecorator.Import) {
+                @Override
+                public void actionPerformed(@NotNull AnActionEvent event) {
+                    HexFileEditor editor = currentEditor;
+                    if (editor != null) {
+                        editor.importOperationHistory();
+                    }
+                }
+
+                @Override
+                public void update(@NotNull AnActionEvent event) {
+                    event.getPresentation().setEnabled(currentEditor != null);
+                }
+            });
+            ActionToolbar toolbar = ActionManager.getInstance()
+                    .createActionToolbar("HexOperationHistory.Toolbar", group, true);
+            toolbar.setTargetComponent(this);
+            header.add(toolbar.getComponent(), BorderLayout.NORTH);
+            fileLabel.setBorder(JBUI.Borders.empty(2, 2, 6, 2));
+            header.add(fileLabel, BorderLayout.SOUTH);
+            return header;
         }
 
         private void installHistoryPopup() {
@@ -109,12 +156,13 @@ public final class HexOperationHistoryToolWindowFactory implements ToolWindowFac
             if (target == null) {
                 return;
             }
-            JMenuItem item = new JMenuItem(HexEditorBundle.message(target.undone()
-                    ? "operationHistory.redoToHere"
-                    : "operationHistory.undoToHere"));
-            item.addActionListener(action -> editor.applyOperationHistorySelection(target));
+            JMenuItem throughItem = new JMenuItem(HexEditorBundle.message("operationHistory.restoreThrough"));
+            throughItem.addActionListener(action -> editor.restoreOperationHistoryThrough(target));
+            JMenuItem beforeItem = new JMenuItem(HexEditorBundle.message("operationHistory.restoreBefore"));
+            beforeItem.addActionListener(action -> editor.restoreOperationHistoryBefore(target));
             JPopupMenu popup = new JPopupMenu();
-            popup.add(item);
+            popup.add(throughItem);
+            popup.add(beforeItem);
             popup.show(historyList, event.getX(), event.getY());
             event.consume();
         }

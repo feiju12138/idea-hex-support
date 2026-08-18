@@ -68,20 +68,25 @@ final class HexOperationHistoryFile {
         LoadedHistory legacy = readLegacy(lines);
         boolean historyIsNewerThanSource = Files.getLastModifiedTime(historyPath).toMillis()
                 >= Files.getLastModifiedTime(sourcePath).toMillis();
-        return new LoadedHistory(legacy.baseMatches() && historyIsNewerThanSource, legacy.operations());
+        return new LoadedHistory(legacy.formatValid(), legacy.baseMatches() && historyIsNewerThanSource,
+                legacy.operations());
     }
 
     private static LoadedHistory readMachineSection(List<String> lines, int dataStart, Path sourcePath) throws IOException {
         long baseSize = -1;
         long baseModified = -1;
+        boolean sawBase = false;
+        boolean sawEnd = false;
         List<PersistedOperation> operations = new ArrayList<>();
         for (int i = dataStart + 1; i < lines.size(); i++) {
             String line = lines.get(i);
             if (DATA_END.equals(line)) {
+                sawEnd = true;
                 break;
             }
             Map<String, String> values = parseFields(line);
             if (line.startsWith("base\t")) {
+                sawBase = true;
                 baseSize = parseLong(values, "size", -1);
                 baseModified = parseLong(values, "modified", -1);
             } else if (line.startsWith("op\t")) {
@@ -92,7 +97,7 @@ final class HexOperationHistoryFile {
                 && baseModified == Files.getLastModifiedTime(sourcePath).toMillis();
         operations = mergeDisplayOperations(lines.subList(0, dataStart), operations);
         operations.sort(Comparator.comparingLong(operation -> operation.record().sequence()));
-        return new LoadedHistory(baseMatches, operations);
+        return new LoadedHistory(sawBase && sawEnd, baseMatches, operations);
     }
 
     private static PersistedOperation readMachineOperation(Map<String, String> values) {
@@ -133,7 +138,7 @@ final class HexOperationHistoryFile {
             return LoadedHistory.empty();
         }
         operations.sort(Comparator.comparingLong(operation -> operation.record().sequence()));
-        return new LoadedHistory(true, operations);
+        return new LoadedHistory(true, true, operations);
     }
 
     private static List<PersistedOperation> mergeDisplayOperations(List<String> lines, List<PersistedOperation> machineOperations) {
@@ -360,9 +365,9 @@ final class HexOperationHistoryFile {
     record PersistedOperation(HexDocument.OperationRecord record, boolean undone) {
     }
 
-    record LoadedHistory(boolean baseMatches, List<PersistedOperation> operations) {
+    record LoadedHistory(boolean formatValid, boolean baseMatches, List<PersistedOperation> operations) {
         static LoadedHistory empty() {
-            return new LoadedHistory(false, List.of());
+            return new LoadedHistory(false, false, List.of());
         }
     }
 }

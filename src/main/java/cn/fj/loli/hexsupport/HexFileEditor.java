@@ -1,9 +1,15 @@
 package cn.fj.loli.hexsupport;
 
+import cn.fj.loli.hexsupport.structure.BinarySnapshot;
+
 import com.intellij.codeHighlighting.BackgroundEditorHighlighter;
 import com.intellij.openapi.command.CommandProcessor;
+import com.intellij.openapi.command.UndoConfirmationPolicy;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.undo.BasicUndoableAction;
+import com.intellij.openapi.command.undo.DocumentReference;
+import com.intellij.openapi.command.undo.DocumentReferenceManager;
+import com.intellij.openapi.command.undo.DocumentReferenceProvider;
 import com.intellij.openapi.command.undo.UndoManager;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
@@ -101,7 +107,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public final class HexFileEditor extends UserDataHolderBase implements FileEditor, BinaryDataSource {
+public final class HexFileEditor extends UserDataHolderBase implements FileEditor, BinarySnapshot, DocumentReferenceProvider {
     private static final int DEFAULT_BYTES_PER_ROW = 16;
     private static final String MODIFIED_PROPERTY = "modified";
     static final String HISTORY_PROPERTY = "history";
@@ -113,6 +119,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
 
     private final Project project;
     private final VirtualFile file;
+    private final DocumentReference undoDocumentReference;
     private final PropertyChangeSupport changeSupport = new PropertyChangeSupport(this);
     private final JPanel component = new JPanel(new BorderLayout());
     private final HexTableModel model;
@@ -150,6 +157,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
     public HexFileEditor(Project project, VirtualFile file) {
         this.project = project;
         this.file = file;
+        this.undoDocumentReference = DocumentReferenceManager.getInstance().create(file);
         this.model = new HexTableModel(new HexDocument(Path.of(file.getPath())), DEFAULT_BYTES_PER_ROW);
         this.table = new HexTable(model);
         this.selectionSynchronizer = new HexSelectionSynchronizer(project, file, this);
@@ -509,7 +517,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         group.add(new ToolbarAction(HexEditorBundle.message("action.exportHistory.text"), HexEditorBundle.message("action.exportHistory.description"), AllIcons.General.Export) {
             @Override
             public void actionPerformed(@NotNull AnActionEvent event) {
-                exportOperationHistory(true);
+                exportOperationHistory();
             }
         });
         group.add(new ToolbarAction(HexEditorBundle.message("action.reload.text"), HexEditorBundle.message("action.reload.description"), AllIcons.Actions.Refresh) {
@@ -1388,7 +1396,8 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         CommandProcessor.getInstance().executeCommand(project,
                 () -> UndoManager.getInstance(project).undoableActionPerformed(new HexUndoableAction()),
                 "Hex Edit",
-                new Object());
+                new Object(),
+                UndoConfirmationPolicy.DO_NOT_REQUEST_CONFIRMATION);
     }
 
     private void clampSelectionsToData() {
@@ -1764,12 +1773,12 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
     private record OperationHistoryEntry(HexDocument.OperationRecord record, boolean undone) {
     }
 
-    record OperationHistorySelection(long sequence, boolean undone) {
+    record OperationHistorySelection(long sequence) {
     }
 
     private final class HexUndoableAction extends BasicUndoableAction {
         private HexUndoableAction() {
-            super(file);
+            super(undoDocumentReference);
         }
 
         @Override
@@ -1804,12 +1813,14 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         if (!saveInProgress.compareAndSet(false, true)) {
             return;
         }
+        List<HexDocument.State> statesToPreserve = new ArrayList<>(undoStack);
+        statesToPreserve.addAll(redoStack);
         ProgressManager.getInstance().run(new Task.Backgroundable(project, title, true) {
             @Override
             public void run(@NotNull ProgressIndicator indicator) {
                 indicator.setText(title);
                 try {
-                    model.saveTo(target, progressReporter(indicator));
+                    model.saveTo(target, statesToPreserve, progressReporter(indicator));
                 } catch (IOException exception) {
                     throw new UncheckedIOException(exception);
                 }
@@ -1989,31 +2000,37 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         if (displayIndex < 0 || displayIndex >= entries.size()) {
             return null;
         }
-        OperationHistoryEntry entry = entries.get(displayIndex);
-        return new OperationHistorySelection(entry.record().sequence(), entry.undone());
+        return new OperationHistorySelection(entries.get(displayIndex).record().sequence());
     }
 
-    void applyOperationHistorySelection(OperationHistorySelection selection) {
+    void restoreOperationHistoryThrough(OperationHistorySelection selection) {
         if (selection == null) {
             return;
         }
-        if (selection.undone()) {
-            redoOperationHistoryTo(selection.sequence());
-        } else {
-            undoOperationHistoryTo(selection.sequence());
-        }
-    }
-
-    private void undoOperationHistoryTo(long targetSequence) {
-        while (isOperationSequenceActive(targetSequence)) {
+        long targetSequence = selection.sequence();
+        while (hasActiveOperationAfter(targetSequence)) {
             if (!performUndoStep()) {
+                return;
+            }
+        }
+        while (!isOperationSequenceActive(targetSequence) && isOperationSequenceRedoable(targetSequence)) {
+            if (!performRedoStep()) {
                 return;
             }
         }
     }
 
-    private void redoOperationHistoryTo(long targetSequence) {
-        while (!isOperationSequenceActive(targetSequence) && isOperationSequenceRedoable(targetSequence)) {
+    void restoreOperationHistoryBefore(OperationHistorySelection selection) {
+        if (selection == null) {
+            return;
+        }
+        long targetSequence = selection.sequence();
+        while (isOperationSequenceActive(targetSequence) || hasActiveOperationAfter(targetSequence)) {
+            if (!performUndoStep()) {
+                return;
+            }
+        }
+        while (isOperationSequenceRedoable(targetSequence) && !nextRedoStateContains(targetSequence)) {
             if (!performRedoStep()) {
                 return;
             }
@@ -2060,6 +2077,28 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         return false;
     }
 
+    private boolean hasActiveOperationAfter(long sequence) {
+        for (HexDocument.OperationRecord record : model.operationRecords()) {
+            if (record.sequence() > sequence) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean nextRedoStateContains(long sequence) {
+        HexDocument.State next = redoStack.peek();
+        if (next == null) {
+            return false;
+        }
+        for (HexDocument.OperationRecord record : next.operations()) {
+            if (record.sequence() == sequence) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private String formatOperationHistoryLine(OperationHistoryEntry entry) {
         HexDocument.OperationRecord record = entry.record();
         StringBuilder builder = new StringBuilder();
@@ -2095,13 +2134,12 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
 
     private void autoExportOperationHistory() {
         if (HexSupportSettings.getInstance().autoSaveHistory()) {
-            exportOperationHistory(false);
+            exportOperationHistory(operationHistoryPath(), false);
         }
     }
 
-    private void exportOperationHistory(boolean showMessage) {
+    private void exportOperationHistory(Path historyPath, boolean showMessage) {
         try {
-            Path historyPath = operationHistoryPath();
             Files.writeString(historyPath, operationHistoryText(), StandardCharsets.UTF_8);
             if (showMessage) {
                 Messages.showInfoMessage(project,
@@ -2112,6 +2150,28 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
             if (showMessage) {
                 Messages.showErrorDialog(project, rootMessage(exception), HexEditorBundle.message("dialog.operationHistory.exportFailed"));
             }
+        }
+    }
+
+    void exportOperationHistory() {
+        FileSaverDescriptor descriptor = new FileSaverDescriptor(
+                HexEditorBundle.message("dialog.operationHistory.export.title"),
+                HexEditorBundle.message("dialog.operationHistory.export.description"));
+        VirtualFileWrapper wrapper = FileChooserFactory.getInstance()
+                .createSaveFileDialog(descriptor, project)
+                .save(file.getParent(), operationHistoryFileName());
+        if (wrapper != null) {
+            exportOperationHistory(wrapper.getFile().toPath(), true);
+        }
+    }
+
+    void importOperationHistory() {
+        FileChooserDescriptor descriptor = new FileChooserDescriptor(true, false, false, false, false, false)
+                .withTitle(HexEditorBundle.message("dialog.operationHistory.import.title"))
+                .withDescription(HexEditorBundle.message("dialog.operationHistory.import.description"));
+        VirtualFile selected = FileChooser.chooseFile(descriptor, project, file.getParent());
+        if (selected != null) {
+            loadOperationHistory(Path.of(selected.getPath()), true);
         }
     }
 
@@ -2127,7 +2187,11 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
     }
 
     private Path operationHistoryPath() {
-        return Path.of(file.getPath()).resolveSibling(file.getName() + ".hex-history.txt");
+        return Path.of(file.getPath()).resolveSibling(operationHistoryFileName());
+    }
+
+    private String operationHistoryFileName() {
+        return file.getName() + ".hex-history.txt";
     }
 
     private String operationHistoryText() throws IOException {
@@ -2156,15 +2220,63 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         if (!Files.isRegularFile(historyPath)) {
             return;
         }
+        loadOperationHistory(historyPath, false);
+    }
+
+    private void loadOperationHistory(Path historyPath, boolean manualImport) {
+        HexOperationHistoryFile.LoadedHistory history;
+        try {
+            history = HexOperationHistoryFile.read(historyPath, Path.of(file.getPath()));
+        } catch (RuntimeException | IOException exception) {
+            if (manualImport) {
+                Messages.showErrorDialog(project, rootMessage(exception),
+                        HexEditorBundle.message("dialog.operationHistory.importFailed"));
+            }
+            return;
+        }
+        if (!history.formatValid()) {
+            if (manualImport) {
+                Messages.showErrorDialog(project,
+                        HexEditorBundle.message("dialog.operationHistory.invalidFormat"),
+                        HexEditorBundle.message("dialog.operationHistory.importFailed"));
+            }
+            return;
+        }
+        if (!history.baseMatches()) {
+            if (manualImport) {
+                Messages.showErrorDialog(project,
+                        HexEditorBundle.message("dialog.operationHistory.baseMismatch"),
+                        HexEditorBundle.message("dialog.operationHistory.importFailed"));
+            }
+            return;
+        }
+        if (history.operations().isEmpty()) {
+            if (manualImport) {
+                Messages.showInfoMessage(project, HexEditorBundle.message("dialog.operationHistory.empty"),
+                        HexEditorBundle.message("dialog.operationHistory.title"));
+            }
+            return;
+        }
+        if (manualImport && (!operationHistoryEntries().isEmpty() || modified)) {
+            int answer = Messages.showYesNoDialog(project,
+                    HexEditorBundle.message("dialog.operationHistory.import.confirm.message"),
+                    HexEditorBundle.message("dialog.operationHistory.import.confirm.title"),
+                    Messages.getQuestionIcon());
+            if (answer != Messages.YES) {
+                return;
+            }
+        }
+
         HexDocument.State before = model.snapshot();
         Deque<HexDocument.State> undoBeforeLoad = new ArrayDeque<>(undoStack);
         Deque<HexDocument.State> redoBeforeLoad = new ArrayDeque<>(redoStack);
         Deque<HexDocument.State> loadedUndoStates = new ArrayDeque<>();
         Deque<HexDocument.State> loadedRedoStates = new ArrayDeque<>();
         try {
-            HexOperationHistoryFile.LoadedHistory history = HexOperationHistoryFile.read(historyPath, Path.of(file.getPath()));
-            if (!history.baseMatches() || history.operations().isEmpty()) {
-                return;
+            if (manualImport) {
+                model.reload();
+                undoStack.clear();
+                redoStack.clear();
             }
             List<HexDocument.OperationRecord> activeRecords = new ArrayList<>();
             List<HexDocument.OperationRecord> undoneRecords = new ArrayList<>();
@@ -2185,19 +2297,39 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
                 model.restore(activeState);
             }
             undoStack.clear();
-            undoStack.addAll(undoBeforeLoad);
             undoStack.addAll(loadedUndoStates);
             redoStack.clear();
             redoStack.addAll(loadedRedoStates);
             setModified(!activeRecords.isEmpty());
             scheduleHistoryChanged();
-        } catch (RuntimeException | IOException exception) {
+            changeSupport.firePropertyChange(ANALYSIS_PROPERTY, null, model.revision());
+            clampSelectionsToData();
+            table.repaint();
+            if (manualImport) {
+                clearPlatformUndoHistory();
+                Messages.showInfoMessage(project,
+                        HexEditorBundle.message("dialog.operationHistory.imported", historyPath.toString()),
+                        HexEditorBundle.message("dialog.operationHistory.title"));
+            }
+        } catch (RuntimeException exception) {
             model.restore(before);
             undoStack.clear();
             undoStack.addAll(undoBeforeLoad);
             redoStack.clear();
             redoStack.addAll(redoBeforeLoad);
+            if (manualImport) {
+                Messages.showErrorDialog(project, rootMessage(exception),
+                        HexEditorBundle.message("dialog.operationHistory.importFailed"));
+            }
         }
+    }
+
+    private void clearPlatformUndoHistory() {
+        CommandProcessor.getInstance().executeCommand(project,
+                () -> UndoManager.getInstance(project).nonundoableActionPerformed(undoDocumentReference, false),
+                "Import Hex History",
+                new Object(),
+                UndoConfirmationPolicy.DO_NOT_REQUEST_CONFIRMATION);
     }
 
     private String operationTypeText(HexDocument.OperationType type) {
@@ -3164,6 +3296,11 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
     @Override
     public @NotNull VirtualFile getFile() {
         return file;
+    }
+
+    @Override
+    public @NotNull List<DocumentReference> getDocumentReferences() {
+        return List.of(undoDocumentReference);
     }
 
     @Override
