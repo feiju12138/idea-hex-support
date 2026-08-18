@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-Hex Support 是一款 IntelliJ Platform 插件，可用于查看、编辑、搜索、分析和比较二进制文件。2.4.0 版本增加了只读的二进制结构分析，并继续由 Hex 编辑器现有的撤销/重做机制管理所有字节改动。
+Hex Support 是一款 IntelliJ Platform 插件，可用于查看、编辑、搜索、检查和比较二进制文件。3.0.0 版本将二进制结构窗口改造成可扩展宿主，同时保证未安装任何模板语言插件时 Hex 编辑器仍可完整使用。
 
 ## 功能
 
@@ -24,30 +24,49 @@ Hex Support 是一款 IntelliJ Platform 插件，可用于查看、编辑、搜�
 ### 历史窗口、历史文件与设置
 
 - 每次编辑都会进入 IntelliJ 的撤销/重做体系，并显示在 **Hex 操作历史** 窗口中。
-- 选择历史条目可查看偏移、修改前后字节和时间，也可直接回退或前进到操作序列中的指定位置。
-- 可从编辑器工具栏手动导出历史记录。历史文件与原文件保存在同一目录，命名为 `<原文件名>.hex-history.txt`；再次打开原文件时，会自动加载与其匹配的有效历史文件。
+- 选择历史条目可查看偏移、修改前后字节和时间。每个条目的右键菜单固定提供 **回退到当前**（保留所选操作的结果）和 **回退到之前**（恢复到所选操作执行前）两项。
+- **Hex 操作历史** 工具栏中导出按钮位于导入按钮左侧。手动导出会打开另存为对话框，默认文件名为 `<原文件名>.hex-history.txt`，但可自由选择保存位置和文件名；手动导入不限制文件名，只要文件是 Hex Support 导出的有效历史格式且与当前源文件版本匹配即可。
+- 只有启用自动导出时，历史文件才会直接写入原文件同一目录并使用 `<原文件名>.hex-history.txt`。首次打开源文件时，如果同目录存在与源文件匹配的该规范文件名历史文件，则会自动载入。
+- 使用 `Ctrl+S` 保存以及在已打开的 Hex 编辑器标签之间切换时，各编辑器的内存历史和撤销/重做状态都会保留。
 - 打开 **设置 | 工具 | Hex Support**，启用 **自动导出操作历史记录文件** 后，历史发生变化时会自动更新历史文件。
 - 如果希望保存 Hex 文件后移除历史文件，可启用 **保存 Hex 文件时删除操作历史记录文件**。
 
-### 二进制结构分析
+### 可扩展二进制结构
 
-打开 **二进制结构** 窗口，点击 **导入 .bt 文件** 选择用户自己准备的模板。插件不会内置、下载或提供模板文件。
+Hex Support 本身不再包含模板解析器。需要结构化分析时，请打开 **二进制结构** 窗口并安装一个或多个兼容的 Structure Provider 插件。第一方的 **Binary Template Support** Provider 用于处理 010 Editor `.bt` 文件。
 
-- 分析为只读操作，在后台执行，并读取编辑器的当前版本，包括尚未保存的字节修改。
-- 分析结果以树形结构展示 **名称**、**值**、**偏移**、**大小** 和 **类型**。选择结果行会选中对应字节范围；选择字节也会定位到最深层的匹配结果行。
-- 编辑后会自动重新分析。工具栏只包含导入、清除、全部展开和全部闭合；清除后会移除当前模板、结果、高亮以及与原始数据选区的自动联动。
-- 解释器支持常见整数和浮点数、字符串、数组、结构体、联合体、枚举、类型别名、表达式、控制流、函数、属性、大小端切换、读取/定位和校验和。遇到不支持的语法或不安全操作时只会显示诊断信息，不会修改文件。
-- 执行环境限制运行时间、步骤数、递归、循环、分配、读取量和结果节点数，并禁止访问文件系统、启动进程、联网、加载本地库和外部包含文件。
-- 受支持的固定大小标量字段可显示背景高亮；前景文字颜色以及动态或复合字段的背景色不会被渲染，但结构行信息和范围定位仍然可用。
+- 未安装 Provider 时，Hex 编辑、搜索、历史记录和 Diff 功能仍可完整使用。
+- 点击 **安装 BT Provider** 可打开 IDE 插件安装界面并安装 Binary Template Support；其他 Provider 插件也可独立安装。
+- **导入模板** 会接受所有已安装 Provider 声明的扩展名。如果有多个 Provider 支持同一文件，Hex Support 会要求选择并记住所选 Provider。
+- 分析在后台针对当前编辑器的只读快照执行，包括尚未保存的字节修改。
+- Provider 无关的结果以树形结构展示 **名称**、**值**、**偏移**、**大小** 和 **类型**，结构行与字节选区保持双向联动。
+- 编辑后会自动重新分析；清除操作会移除模板、结果树、高亮和范围联动。
+- Provider 可以返回诊断信息、文本输出和背景高亮，但当前只读 API 不允许 Provider 修改 Hex 文档。
+
+#### 开发 Structure Provider
+
+Hex Support 提供动态扩展点 `cn.fj.loli.hexsupport.binaryStructureProvider`，公共 API 位于 `cn.fj.loli.hexsupport.structure`。Provider 插件应可选依赖 `cn.fj.loli.hexsupport`，并在可选描述文件中注册实现：
+
+```xml
+<extensions defaultExtensionNs="cn.fj.loli.hexsupport">
+    <binaryStructureProvider implementation="com.example.MyStructureProvider"/>
+</extensions>
+```
+
+实现 `BinaryStructureProvider`、声明支持的模板扩展名并返回 `StructureAnalysisResult`。采用可选依赖后，即使未安装 Hex Support，Provider 插件自身的语言支持仍可独立使用。
 
 ### Hex 差异比较
 
 - 可将当前 Hex 编辑器与另一个文件进行基于数据块的差异计算。
 - 使用 `F7` 和 `Shift+F7` 跳转到下一处或上一处差异，查看变化范围，并在两侧之间复制改动。
 
-### 本地化
+### 将 Hex 设为某个扩展名的默认编辑器
 
-- 编辑器、对话框、设置页和工具窗口标题均提供英文和简体中文界面。
+1. 打开 **设置 | 编辑器 | 文件类型**。
+2. 在 **已识别的文件类型** 中选择 **十六进制文件**。
+3. 在 **文件名模式** 中添加 `*.exe` 等模式并应用。
+
+匹配该模式的文件会直接在 Hex Support 中打开。未关联到此文件类型的文件仍可选择 Hex 作为备用编辑器。
 
 ## 快捷键
 
@@ -72,36 +91,19 @@ Hex Support 是一款 IntelliJ Platform 插件，可用于查看、编辑、搜�
 
 ## 构建
 
-项目要求使用 JDK 21 和 Gradle 9 或更高版本。构建并运行测试：
+项目要求使用 JDK 21 和 Gradle 9 或更高版本：
 
 ```shell
 gradle test buildPlugin
 ```
 
-生成的插件 ZIP 位于 `build/distributions/`。
-
-若要直接使用已安装的 IntelliJ IDEA 进行验证，避免再次下载 IDE 发行版，可传入安装目录：
+若要使用已安装的 IDE 构建，可传入其安装目录：
 
 ```shell
 gradle test buildPlugin -PlocalIdePath=/path/to/IntelliJ-IDEA
 ```
 
-在 Windows 上使用本工作区旁的工具链：
-
-```powershell
-G:\ProjectsDemo\tools\gradle-9.6.0\bin\gradle.bat test buildPlugin `
-  -PlocalIdePath="C:\Program Files\JetBrains\IntelliJ IDEA 2026.1.3"
-```
-
-请确保 Gradle 启动器本身运行在 JDK 21 上。只设置 `org.gradle.java.home` 会控制构建 JVM，但不能替换 Gradle 启动器使用的过旧 Java 运行时。
-
-## 将 Hex 设为某个扩展名的默认编辑器
-
-1. 打开 **设置 | 编辑器 | 文件类型**。
-2. 在 **已识别的文件类型** 中选择 **十六进制文件**。
-3. 在 **文件名模式** 中添加 `*.exe` 等模式并应用。
-
-匹配该模式的文件会直接在 Hex Support 中打开。未关联到此文件类型的文件仍可选择 Hex 作为备用编辑器。
+生成的 ZIP 位于 `build/distributions/`。
 
 ## 兼容性
 

@@ -2,7 +2,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-Hex Support is an IntelliJ Platform plugin for viewing, editing, searching, analyzing, and comparing binary files. Version 2.4.0 adds read-only binary structure analysis while keeping all byte changes in the Hex editor's existing Undo/Redo workflow.
+Hex Support is an IntelliJ Platform plugin for viewing, editing, searching, inspecting, and comparing binary files. Version 3.0.0 turns the Binary Structure window into an extensible host while keeping the Hex editor completely usable without any template-language plugin.
 
 ## Features
 
@@ -24,30 +24,49 @@ Hex Support is an IntelliJ Platform plugin for viewing, editing, searching, anal
 ### History window, history files, and settings
 
 - Every editing operation participates in IntelliJ Undo/Redo and appears in the **Hex History** tool window.
-- Select a history entry to review its offset, before/after bytes, and time; move directly backward or forward to that point in the operation sequence.
-- Export history manually from the editor toolbar. The sidecar is stored beside the source file as `<source-name>.hex-history.txt` and a valid matching sidecar is loaded when the source file is opened again.
+- Select a history entry to review its offset, before/after bytes, and time. Every entry's context menu provides **Restore Through This Operation** (keep the selected operation applied) and **Restore Before This Operation** (restore the state immediately before it).
+- The **Hex History** toolbar places Export before Import. Manual export opens a Save As dialog and defaults to `<source-name>.hex-history.txt`, while allowing any destination and filename. Manual import accepts any filename as long as it is a valid Hex Support history export for the current source version.
+- Automatic export is the only mode that writes directly beside the source as `<source-name>.hex-history.txt`. When a source file is first opened, a matching sidecar with that standard filename is loaded automatically.
+- Saving with `Ctrl+S` and switching between open Hex editor tabs retain each editor's in-memory history and Undo/Redo states.
 - Open **Settings | Tools | Hex Support** and enable **Automatically export operation history files** to update the sidecar shortly after history changes.
 - Enable **Delete operation history file when saving the hex file** if the sidecar should be removed after the edited source is saved.
 
-### Binary Structure analysis
+### Extensible Binary Structure
 
-Open the **Binary Structure** tool window and use **Import .bt File** to select a user-supplied template. The plugin does not bundle, download, or provide template files.
+Hex Support does not contain a template parser. Open the **Binary Structure** tool window and install one or more compatible Structure provider plugins when structured analysis is needed. **Binary Template Support** is the first-party provider for 010 Editor `.bt` files.
 
-- Analysis is read-only, runs in the background, and reads the current editor revision, including unsaved byte changes.
-- Results are displayed as a hierarchy with **Name**, **Value**, **Offset**, **Size**, and **Type** columns. Selecting a row selects the corresponding byte range; selecting bytes reveals the deepest matching row.
-- Results refresh automatically after an edit. The toolbar contains only import, clear, expand all, and collapse all actions. Clear removes the active template, results, highlights, and automatic range linkage.
-- The interpreter supports common scalar integers and floats, strings, arrays, structures, unions, enumerations, type aliases, expressions, control flow, functions, attributes, endian changes, reads/seeks, and checksums. Unsupported syntax or unsafe operations are reported as diagnostics without modifying the file.
-- Execution is sandboxed with limits for runtime, steps, recursion, loops, allocations, reads, and result nodes. File-system access, process execution, networking, native libraries, and external includes are unavailable.
-- Supported fixed-size scalar fields may contribute background highlights. Foreground text colors and dynamic or composite field backgrounds are not rendered; row metadata and range navigation remain available.
+- Hex editing, search, history, and Diff remain fully available when no provider is installed.
+- **Install BT Provider** opens the IDE plugin installer for Binary Template Support. Other provider plugins can be installed independently.
+- **Import Template** accepts every extension advertised by installed providers. If multiple providers support the selected file, Hex Support asks which provider to use and remembers the selection.
+- Analysis runs in the background against a read-only snapshot of the current editor revision, including unsaved byte changes.
+- Provider-neutral results are displayed as a hierarchy with **Name**, **Value**, **Offset**, **Size**, and **Type** columns. Row and byte selections remain linked in both directions.
+- Results refresh automatically after edits. Clearing removes the template, result tree, highlights, and automatic range linkage.
+- A provider may return diagnostics, textual output, and background highlights. It cannot mutate the Hex document through the current read-only API.
+
+#### Developing a Structure provider
+
+Hex Support publishes the dynamic `cn.fj.loli.hexsupport.binaryStructureProvider` extension point and the API in `cn.fj.loli.hexsupport.structure`. A provider plugin should declare an optional dependency on `cn.fj.loli.hexsupport`, then register its implementation from the optional descriptor:
+
+```xml
+<extensions defaultExtensionNs="cn.fj.loli.hexsupport">
+    <binaryStructureProvider implementation="com.example.MyStructureProvider"/>
+</extensions>
+```
+
+Implement `BinaryStructureProvider`, advertise the supported template extensions, and return a `StructureAnalysisResult`. Depending on Hex Support optionally keeps the provider's own language support usable when Hex Support is absent.
 
 ### Hex diff
 
 - Compare the active Hex editor with another file using block-based diff computation.
 - Navigate differences with `F7` and `Shift+F7`, inspect changed ranges, and copy changes between sides.
 
-### Localization
+### Make Hex the default editor for a file extension
 
-- The editor, dialogs, settings, and tool-window titles are available in English and Simplified Chinese.
+1. Open **Settings | Editor | File Types**.
+2. Select **Hexadecimal files** under **Recognized File Types**.
+3. Add a filename pattern such as `*.exe` under **File Name Patterns** and apply the change.
+
+Files matching that pattern open directly in Hex Support. Files not assigned to this file type still offer Hex as an alternate editor.
 
 ## Keyboard shortcuts
 
@@ -72,36 +91,19 @@ Shortcuts use the platform menu modifier: `Ctrl` on Windows/Linux and `Command` 
 
 ## Build
 
-The project requires JDK 21 and Gradle 9 or later. Build and test with:
+The project requires JDK 21 and Gradle 9 or later:
 
 ```shell
 gradle test buildPlugin
 ```
 
-The resulting plugin ZIP is written to `build/distributions/`.
-
-To validate against an already installed IntelliJ IDEA without downloading another IDE distribution, pass its installation directory:
+To build against an installed IDE, pass its installation directory:
 
 ```shell
 gradle test buildPlugin -PlocalIdePath=/path/to/IntelliJ-IDEA
 ```
 
-For the toolchain included beside this workspace on Windows:
-
-```powershell
-G:\ProjectsDemo\tools\gradle-9.6.0\bin\gradle.bat test buildPlugin `
-  -PlocalIdePath="C:\Program Files\JetBrains\IntelliJ IDEA 2026.1.3"
-```
-
-Ensure that Gradle itself is launched with JDK 21. Setting only `org.gradle.java.home` controls the build JVM but does not replace an obsolete Java runtime used by the Gradle launcher.
-
-## Make Hex the default editor for a file extension
-
-1. Open **Settings | Editor | File Types**.
-2. Select **Hexadecimal files** under **Recognized File Types**.
-3. Add a filename pattern such as `*.exe` under **File Name Patterns** and apply the change.
-
-Files matching that pattern open directly in Hex Support. Files not assigned to this file type still offer Hex as an alternate editor.
+The resulting ZIP is written to `build/distributions/`.
 
 ## Compatibility
 
