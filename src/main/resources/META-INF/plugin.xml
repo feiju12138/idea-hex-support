@@ -3,6 +3,12 @@
 
     <depends>com.intellij.modules.platform</depends>
 
+    <extensionPoints>
+        <extensionPoint name="binaryStructureProvider"
+                        interface="cn.fj.loli.hexsupport.structure.BinaryStructureProvider"
+                        dynamic="true"/>
+    </extensionPoints>
+
     <extensions defaultExtensionNs="com.intellij">
         <fileType name="HEX" implementationClass="cn.fj.loli.hexsupport.HexFileType"
                   fieldName="INSTANCE"/>
