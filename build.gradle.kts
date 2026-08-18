@@ -4,11 +4,17 @@ plugins {
 }
 
 group = "cn.fj.loli"
-version = "2.3.1"
+version = "2.4.0"
+
+val localIdePath = providers.gradleProperty("localIdePath")
 
 dependencies {
     intellijPlatform {
-        intellijIdea("2025.1")
+        if (localIdePath.isPresent) {
+            local(localIdePath.get())
+        } else {
+            intellijIdea("2025.1")
+        }
     }
     testRuntimeOnly("junit:junit:4.13.2")
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.2")
@@ -21,11 +27,12 @@ intellijPlatform {
         name = "Hex Support"
         version = project.version.toString()
         description = """
-            <p>Open and edit files as hexadecimal data inside IntelliJ IDEA.</p>
-            <p>Provides an editable hex byte table plus side-by-side and unified Hex viewers for the IDE Diff window, with byte alignment, insert/delete/modify highlighting, and Jump to Source support.</p>
+            <p>Open, edit, and analyze files as hexadecimal data inside IntelliJ IDEA.</p>
+            <p>Provides an editable hex byte table, read-only analysis with user-supplied .bt templates, and side-by-side and unified Hex viewers for the IDE Diff window.</p>
         """.trimIndent()
         changeNotes = """
             <ul>
+                <li>2.4.0: Add sandboxed read-only analysis with user-supplied .bt templates, localized Structure and History tool-window titles, automatic refresh after Hex edits, a focused Import/Clear/Expand/Collapse toolbar, supported background highlights, and bidirectional byte-range navigation.</li>
                 <li>2.3.1: Restore IntelliJ IDEA 2025.1+ compatibility with stable platform APIs, and synchronize unchanged selections from both unified viewers to both old/new sides across all four Diff modes.</li>
                 <li>2.3.0: Synchronize all selection ranges bidirectionally between Hex and text editors, including Text Editor and Markdown Split Editor multi-caret selections and mixed line separators; share one multi-range selection state across all four Diff viewers (Side-by-side, Unified Viewer, Hex-by-Hex, and Unified Hex), so switching from any viewer to any other preserves the old/new side and exact byte offsets.</li>
                 <li>2.2.0: Add an assignable Hexadecimal file type under Settings | Editor | File Types, allowing filename patterns to make Hex the exclusive default editor while keeping Hex available as an alternate editor for other supported local files.</li>
