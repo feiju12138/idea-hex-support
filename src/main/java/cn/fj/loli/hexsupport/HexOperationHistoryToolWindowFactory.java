@@ -37,6 +37,9 @@ import java.util.List;
 public final class HexOperationHistoryToolWindowFactory implements ToolWindowFactory, DumbAware {
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
+        String title = HexEditorBundle.message("toolwindow.stripe.Hex_History");
+        toolWindow.setTitle(title);
+        toolWindow.setStripeTitle(title);
         HexOperationHistoryPanel historyPanel = new HexOperationHistoryPanel(project);
         Content historyContent = ContentFactory.getInstance().createContent(historyPanel, "", false);
         historyContent.setDisposer(historyPanel);

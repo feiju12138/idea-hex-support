@@ -41,8 +41,17 @@ public final class HexSupportSettings implements PersistentStateComponent<HexSup
         state.deleteHistoryOnSave = deleteHistoryOnSave;
     }
 
+    String binaryTemplatePath() {
+        return state.binaryTemplatePath;
+    }
+
+    void setBinaryTemplatePath(String binaryTemplatePath) {
+        state.binaryTemplatePath = binaryTemplatePath == null ? "" : binaryTemplatePath;
+    }
+
     public static final class SettingsState {
         public boolean autoSaveHistory = false;
         public boolean deleteHistoryOnSave = false;
+        public String binaryTemplatePath = "";
     }
 }

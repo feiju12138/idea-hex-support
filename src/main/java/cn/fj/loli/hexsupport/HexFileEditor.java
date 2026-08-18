@@ -101,10 +101,12 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public final class HexFileEditor extends UserDataHolderBase implements FileEditor {
+public final class HexFileEditor extends UserDataHolderBase implements FileEditor, BinaryDataSource {
     private static final int DEFAULT_BYTES_PER_ROW = 16;
     private static final String MODIFIED_PROPERTY = "modified";
     static final String HISTORY_PROPERTY = "history";
+    static final String ANALYSIS_PROPERTY = "analysis";
+    static final String BYTE_SELECTION_PROPERTY = "byteSelection";
     private static final int LARGE_SEARCH_DEBOUNCE_MS = 2000;
     private static final DateTimeFormatter HISTORY_TIME_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
@@ -119,6 +121,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
     private final Deque<HexDocument.State> undoStack = new ArrayDeque<>();
     private final Deque<HexDocument.State> redoStack = new ArrayDeque<>();
     private final List<Selection> searchMatches = new ArrayList<>();
+    private final List<TemplateHighlight> templateHighlights = new ArrayList<>();
     private JPanel findPanel;
     private JPanel replaceRow;
     private SearchTextField findField;
@@ -190,6 +193,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
             setModified(true);
             refreshActiveSearch();
             scheduleHistoryChanged();
+            changeSupport.firePropertyChange(ANALYSIS_PROPERTY, null, model.revision());
         });
         table.setDefaultEditor(Object.class, new HexCellEditor());
         installHexKeyBindings();
@@ -1359,6 +1363,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
             clampSelectionsToData();
         }
         scheduleHistoryChanged();
+        changeSupport.firePropertyChange(ANALYSIS_PROPERTY, null, model.revision());
         table.repaint();
     }
 
@@ -1375,6 +1380,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
             clampSelectionsToData();
         }
         scheduleHistoryChanged();
+        changeSupport.firePropertyChange(ANALYSIS_PROPERTY, null, model.revision());
         table.repaint();
     }
 
@@ -1698,6 +1704,12 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
                             .append(";\">")
                             .append(text)
                             .append("</span>");
+                } else if (templateBackgroundAt(offset) != null) {
+                    html.append("<span style=\"background-color:")
+                            .append(htmlColor(templateBackgroundAt(offset)))
+                            .append(";\">")
+                            .append(text)
+                            .append("</span>");
                 } else {
                     html.append(text);
                 }
@@ -1717,6 +1729,9 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
             component.setForeground(selectionForeground());
         } else if (isOffsetInSearchMatch(offset)) {
             component.setBackground(searchBackground());
+            component.setForeground(editorForeground());
+        } else if (templateBackgroundAt(offset) != null) {
+            component.setBackground(templateBackgroundAt(offset));
             component.setForeground(editorForeground());
         } else {
             component.setBackground(editorBackground());
@@ -2224,6 +2239,7 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         redoStack.clear();
         setModified(false);
         changeSupport.firePropertyChange(HISTORY_PROPERTY, null, null);
+        changeSupport.firePropertyChange(ANALYSIS_PROPERTY, null, model.revision());
         updateStatus(-1);
     }
 
@@ -2633,6 +2649,12 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
         setSelectionRange(offset, offset);
     }
 
+    record TemplateHighlight(long start, long length, String color) {
+        boolean contains(long offset) {
+            return length > 0 && offset >= start && offset - start < length;
+        }
+    }
+
     /** Selects and reveals a byte requested by a diff viewer's Jump to Source action. */
     void navigateToOffset(long offset) {
         selectOffset(offset);
@@ -2773,14 +2795,87 @@ public final class HexFileEditor extends UserDataHolderBase implements FileEdito
             snapshot.add(new HexSelectionSynchronizer.ByteSelection(selection.start(), selection.length()));
         }
         selectionSynchronizer.hexSelectionChanged(snapshot, activeIndex);
+        changeSupport.firePropertyChange(BYTE_SELECTION_PROPERTY, null, selectedOffset());
     }
 
-    long binaryRevision() {
+    void selectAnalysisRange(long start, long length) {
+        if (model.getDataLength() <= 0 || start < 0 || length <= 0) {
+            return;
+        }
+        long last = model.getDataLength() - 1;
+        long end = length - 1 > last - start ? last : start + length - 1;
+        setSelectionRange(start, end);
+    }
+
+    void clearAnalysisSelection() {
+        clearByteSelection();
+    }
+
+    long analysisSelectedOffset() {
+        return selectedOffset();
+    }
+
+    void setTemplateHighlights(List<TemplateHighlight> highlights) {
+        templateHighlights.clear();
+        if (highlights != null) {
+            templateHighlights.addAll(highlights);
+        }
+        table.repaint();
+    }
+
+    private Color templateBackgroundAt(long offset) {
+        for (int i = templateHighlights.size() - 1; i >= 0; i--) {
+            TemplateHighlight highlight = templateHighlights.get(i);
+            if (highlight.contains(offset)) {
+                return templateColor(highlight.color());
+            }
+        }
+        return null;
+    }
+
+    private static Color templateColor(String name) {
+        if (name == null || name.isBlank() || "cNone".equals(name)) {
+            return null;
+        }
+        if (name.startsWith("#")) {
+            try {
+                Color color = Color.decode(name);
+                return new JBColor(color, color.darker());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return switch (name) {
+            case "cLtGray" -> new JBColor(new Color(0xE8E8E8), new Color(0x3A3D41));
+            case "cLtPurple" -> new JBColor(new Color(0xE8DDF4), new Color(0x493B57));
+            case "cLtRed" -> new JBColor(new Color(0xF4DCDC), new Color(0x553B3B));
+            case "cLtGreen" -> new JBColor(new Color(0xDCEEDC), new Color(0x344B39));
+            case "cLtBlue" -> new JBColor(new Color(0xDCE8F4), new Color(0x34465A));
+            default -> null;
+        };
+    }
+
+    @Override
+    public long length() {
+        return model.getDataLength();
+    }
+
+    @Override
+    public long revision() {
         return model.revision();
     }
 
+    @Override
+    public byte[] read(long offset, int length) {
+        return model.read(offset, length);
+    }
+
+    long binaryRevision() {
+        return revision();
+    }
+
     long binaryLength() {
-        return model.getDataLength();
+        return length();
     }
 
     int unsignedByteAt(long offset) {
