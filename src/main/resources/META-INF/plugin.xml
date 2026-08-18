@@ -11,6 +11,8 @@
         <diff.DiffTool implementation="cn.fj.loli.hexsupport.HexDiffTool"/>
         <diff.DiffTool implementation="cn.fj.loli.hexsupport.HexUnifiedDiffTool"/>
         <toolWindow id="Hex History" anchor="right" factoryClass="cn.fj.loli.hexsupport.HexOperationHistoryToolWindowFactory"/>
+        <toolWindow id="Binary Structure" anchor="bottom" icon="/icons/binaryStructure.svg"
+                    factoryClass="cn.fj.loli.hexsupport.HexStructureToolWindowFactory"/>
         <applicationService serviceImplementation="cn.fj.loli.hexsupport.HexSupportSettings"/>
         <applicationService serviceImplementation="cn.fj.loli.hexsupport.DiffSelectionSynchronizer"/>
         <applicationConfigurable parentId="tools" instance="cn.fj.loli.hexsupport.HexSupportConfigurable"
