@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-Hex Support 是一款 IntelliJ Platform 插件，可用于查看、编辑、搜索、检查和比较二进制文件。3.0.0 版本将二进制结构窗口改造成可扩展宿主，同时保证未安装任何模板语言插件时 Hex 编辑器仍可完整使用。
+Hex Support 是一款 IntelliJ Platform 插件，可用于查看、编辑、搜索、检查和比较二进制文件。3.0.1 版本提供可扩展的二进制结构宿主和公共 Marketplace 发现机制，同时保证未安装任何模板语言插件时 Hex 编辑器仍可完整使用。
 
 ## 功能
 
@@ -36,7 +36,7 @@ Hex Support 是一款 IntelliJ Platform 插件，可用于查看、编辑、搜�
 Hex Support 本身不再包含模板解析器。需要结构化分析时，请打开 **二进制结构** 窗口并安装一个或多个兼容的 Structure Provider 插件。第一方的 **Binary Template Support** Provider 用于处理 010 Editor `.bt` 文件。
 
 - 未安装 Provider 时，Hex 编辑、搜索、历史记录和 Diff 功能仍可完整使用。
-- 点击 **安装 BT Provider** 可打开 IDE 插件安装界面并安装 Binary Template Support；其他 Provider 插件也可独立安装。
+- **查找 Structure 扩展** 会使用公共 Provider 发现关键字打开 JetBrains Marketplace；各个 Provider 插件均可独立安装。
 - **导入模板** 会接受所有已安装 Provider 声明的扩展名。如果有多个 Provider 支持同一文件，Hex Support 会要求选择并记住所选 Provider。
 - 分析在后台针对当前编辑器的只读快照执行，包括尚未保存的字节修改。
 - Provider 无关的结果以树形结构展示 **名称**、**值**、**偏移**、**大小** 和 **类型**，结构行与字节选区保持双向联动。
@@ -54,6 +54,8 @@ Hex Support 提供动态扩展点 `cn.fj.loli.hexsupport.binaryStructureProvider
 ```
 
 实现 `BinaryStructureProvider`、声明支持的模板扩展名并返回 `StructureAnalysisResult`。采用可选依赖后，即使未安装 Hex Support，Provider 插件自身的语言支持仍可独立使用。
+
+为了让尚未安装的 Provider 能被 **查找 Structure 扩展** 发现，请在 JetBrains Marketplace 插件描述中包含完整短语 `Hex Support structure analysis`（即 `BinaryStructureProvider.MARKETPLACE_DISCOVERY_KEYWORD`）。Hex Support 会使用这个公共关键字搜索 Marketplace 元数据，不再维护 Provider 插件 ID；以后发布新的 Provider 无需修改或发布 Hex Support。
 
 ### Hex 差异比较
 
