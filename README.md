@@ -2,7 +2,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-Hex Support is an IntelliJ Platform plugin for viewing, editing, searching, inspecting, and comparing binary files. Version 3.0.0 turns the Binary Structure window into an extensible host while keeping the Hex editor completely usable without any template-language plugin.
+Hex Support is an IntelliJ Platform plugin for viewing, editing, searching, inspecting, and comparing binary files. Version 3.0.1 provides an extensible Binary Structure host with public Marketplace discovery while keeping the Hex editor completely usable without any template-language plugin.
 
 ## Features
 
@@ -36,7 +36,7 @@ Hex Support is an IntelliJ Platform plugin for viewing, editing, searching, insp
 Hex Support does not contain a template parser. Open the **Binary Structure** tool window and install one or more compatible Structure provider plugins when structured analysis is needed. **Binary Template Support** is the first-party provider for 010 Editor `.bt` files.
 
 - Hex editing, search, history, and Diff remain fully available when no provider is installed.
-- **Install BT Provider** opens the IDE plugin installer for Binary Template Support. Other provider plugins can be installed independently.
+- **Find Structure Extensions** opens JetBrains Marketplace with the shared provider discovery keyword. Provider plugins can be installed independently.
 - **Import Template** accepts every extension advertised by installed providers. If multiple providers support the selected file, Hex Support asks which provider to use and remembers the selection.
 - Analysis runs in the background against a read-only snapshot of the current editor revision, including unsaved byte changes.
 - Provider-neutral results are displayed as a hierarchy with **Name**, **Value**, **Offset**, **Size**, and **Type** columns. Row and byte selections remain linked in both directions.
@@ -54,6 +54,8 @@ Hex Support publishes the dynamic `cn.fj.loli.hexsupport.binaryStructureProvider
 ```
 
 Implement `BinaryStructureProvider`, advertise the supported template extensions, and return a `StructureAnalysisResult`. Depending on Hex Support optionally keeps the provider's own language support usable when Hex Support is absent.
+
+To make an uninstalled provider discoverable from **Find Structure Extensions**, include the exact phrase `Hex Support structure analysis` (`BinaryStructureProvider.MARKETPLACE_DISCOVERY_KEYWORD`) in its JetBrains Marketplace description. Hex Support searches Marketplace metadata for this shared keyword instead of maintaining provider plugin IDs, so publishing a new provider does not require a Hex Support release.
 
 ### Hex diff
 
