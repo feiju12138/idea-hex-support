@@ -14,6 +14,9 @@ import java.util.function.BooleanSupplier;
  * Providers receive only a read-only document snapshot and must never mutate the source file.
  */
 public interface BinaryStructureProvider {
+    /** Include this phrase in the Marketplace description so Hex Support can discover the provider. */
+    String MARKETPLACE_DISCOVERY_KEYWORD = "Hex Support structure analysis";
+
     ExtensionPointName<BinaryStructureProvider> EP_NAME =
             ExtensionPointName.create("cn.fj.loli.hexsupport.binaryStructureProvider");
 
