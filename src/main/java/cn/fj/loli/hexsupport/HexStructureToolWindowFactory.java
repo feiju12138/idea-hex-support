@@ -4,13 +4,13 @@ import cn.fj.loli.hexsupport.structure.BinaryStructureProvider;
 import cn.fj.loli.hexsupport.structure.StructureAnalysisResult;
 import cn.fj.loli.hexsupport.structure.StructureDiagnostic;
 import cn.fj.loli.hexsupport.structure.StructureNode;
+import com.intellij.ide.BrowserUtil;
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.ActionToolbar;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
-import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.fileChooser.FileChooser;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.fileEditor.FileEditor;
@@ -23,7 +23,6 @@ import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
-import com.intellij.openapi.updateSettings.impl.pluginsAdvertisement.PluginsAdvertiser;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowFactory;
@@ -50,6 +49,8 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -63,13 +64,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** IntelliJ-native host for structure providers contributed by optional plugins. */
 public final class HexStructureToolWindowFactory implements ToolWindowFactory, DumbAware {
-    private static final PluginId BINARY_TEMPLATE_SUPPORT_ID =
-            PluginId.getId("cn.fj.loli.binarytemplatesupport");
-    private static final PluginId KSY_SUPPORT_ID = PluginId.getId("cn.fj.loli.ksysupport");
-
-    static Set<PluginId> binaryStructureProviderPluginIds() {
-        return Set.of(BINARY_TEMPLATE_SUPPORT_ID, KSY_SUPPORT_ID);
-    }
+    private static final String MARKETPLACE_SEARCH_URL = "https://plugins.jetbrains.com/search?search=";
 
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
@@ -131,9 +126,9 @@ public final class HexStructureToolWindowFactory implements ToolWindowFactory, D
                     HexEditorBundle.message("analysis.action.import.description"), AllIcons.General.OpenDisk) {
                 @Override public void actionPerformed(@NotNull AnActionEvent event) { importTemplate(); }
             });
-            group.add(new DumbAwareAction(HexEditorBundle.message("analysis.action.installProvider"),
-                    HexEditorBundle.message("analysis.action.installProvider.description"), AllIcons.Actions.Download) {
-                @Override public void actionPerformed(@NotNull AnActionEvent event) { installStructureProviders(); }
+            group.add(new DumbAwareAction(HexEditorBundle.message("analysis.action.findProvider"),
+                    HexEditorBundle.message("analysis.action.findProvider.description"), AllIcons.Actions.Download) {
+                @Override public void actionPerformed(@NotNull AnActionEvent event) { findStructureProviders(); }
             });
             group.add(new DumbAwareAction(HexEditorBundle.message("analysis.action.clear"),
                     HexEditorBundle.message("analysis.action.clear.description"), AllIcons.General.Remove) {
@@ -192,7 +187,7 @@ public final class HexStructureToolWindowFactory implements ToolWindowFactory, D
         private void importTemplate() {
             List<BinaryStructureProvider> providers = providers();
             if (providers.isEmpty()) {
-                installStructureProviders();
+                findStructureProviders();
                 return;
             }
             FileChooserDescriptor descriptor = new FileChooserDescriptor(true, false, false, false, false, false)
@@ -229,10 +224,11 @@ public final class HexStructureToolWindowFactory implements ToolWindowFactory, D
             return choice < 0 ? null : matching.get(choice);
         }
 
-        private void installStructureProviders() {
-            statusLabel.setText(HexEditorBundle.message("analysis.provider.installing"));
-            PluginsAdvertiser.installAndEnable(project, binaryStructureProviderPluginIds(), true,
-                    () -> SwingUtilities.invokeLater(this::providerSetChanged));
+        private void findStructureProviders() {
+            statusLabel.setText(HexEditorBundle.message("analysis.provider.searching"));
+            String query = URLEncoder.encode(BinaryStructureProvider.MARKETPLACE_DISCOVERY_KEYWORD,
+                    StandardCharsets.UTF_8);
+            BrowserUtil.browse(MARKETPLACE_SEARCH_URL + query);
         }
 
         private void clearTemplate() {
