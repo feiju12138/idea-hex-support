@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "cn.fj.loli"
-version = "3.0.0"
+version = "3.0.1"
 
 val localIdePath = providers.gradleProperty("localIdePath")
 
@@ -32,6 +32,7 @@ intellijPlatform {
         """.trimIndent()
         changeNotes = """
             <ul>
+                <li>3.0.1: Replace hard-coded Structure provider plugin IDs with shared Marketplace keyword discovery, including Kaitai Struct Support, and document the public discovery convention for third-party providers.</li>
                 <li>3.0.0: Replace the built-in .bt interpreter with a public, dynamic Binary Structure Provider extension point; keep all Hex editing and Diff features fully standalone; add localized provider discovery, installation guidance, generic template import, multi-provider selection, and provider-neutral structure results; fix custom-editor Undo scoping; add two-target history restoration, arbitrary-name history import, and Save As-style manual history export while keeping standard-name sidecars for automatic export/import; and retain in-memory Undo/Redo history across saves and open-editor switches.</li>
                 <li>2.4.0: Add sandboxed read-only analysis with user-supplied .bt templates, localized Structure and History tool-window titles, automatic refresh after Hex edits, a focused Import/Clear/Expand/Collapse toolbar, supported background highlights, and bidirectional byte-range navigation.</li>
                 <li>2.3.1: Restore IntelliJ IDEA 2025.1+ compatibility with stable platform APIs, and synchronize unchanged selections from both unified viewers to both old/new sides across all four Diff modes.</li>
